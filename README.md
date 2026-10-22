@@ -140,11 +140,27 @@ has been performed.
 
 Docker provides a repeatable Node toolchain — nothing more.
 
-**In scope (verified, see AGENTS/lead reports for real output):**
+**Intended scope (verification status below):**
 
 - `npm ci`, `npm run typecheck`, `npm run lint`, `npm test` inside the container
 - the Expo/Metro dev server published on `http://localhost:8081`
   (`curl http://localhost:8081/status` → `packager-status:running`)
+
+**Verification status (2026-10-22):**
+
+- `docker compose config` — **PASSED** (compose file parses and resolves).
+- `docker build` — **BLOCKED, NOT RUN**: the Docker daemon on this machine is
+  not running (`docker version` shows the client only; `systemctl start docker`
+  requires interactive authentication, which an agent must not bypass).
+  Therefore `npm ci` inside the image and the Metro-in-container reachability
+  check are **NOT RUN** — nobody has seen them work yet.
+- Metro itself was verified on the **host** (not in Docker): `expo start` on
+  port 8081 answered `curl http://localhost:8081/status` with
+  `packager-status:running`, and Android + iOS dev bundles built with HTTP 200
+  including the `src/app` placeholder screen (route root `src/app` is
+  auto-detected and configured via `app.json` → `expo-router.root`).
+- Re-run the container checks on a machine with a running Docker daemon before
+  treating the Docker path as verified.
 
 **Out of scope — will NOT work and is not claimed:**
 
