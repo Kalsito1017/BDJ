@@ -1,0 +1,370 @@
+BDZ TRAIN COMPANION APP - PRODUCTION-READINESS REQUIREMENTS FOR AGENTS
+=====================================================================
+
+Purpose
+-------
+This file lists what the coding agents MUST include (or explicitly document as
+deferred) before any part of this project touches a real user, a real payment,
+or real BDZ data. It complements plan.md and does not replace it. If this file
+and plan.md conflict, the stricter rule wins, and the conflict must be recorded
+in docs/decisions.md.
+
+Core rule: the AI writing the code is not the safety net. Every item below
+needs a named human owner, evidence (a test, a config, a document), and a
+status. Never claim an item is done unless it was actually run and verified.
+
+Legend:  [LAUNCH BLOCKER] = must be done before public release
+         [TICKETING GATE] = must be done before in-app ticket sales are enabled
+         [SCALE GATE]     = must be done before claiming any capacity target
+
+
+---------------------------------------------------------------------
+1. AUTHORIZATION, DATA SOURCE AND LEGAL BOUNDARY  [LAUNCH BLOCKER]
+---------------------------------------------------------------------
+[ ] Written BDZ authorization for any API, timetable data, logos or ticketing.
+[ ] No scraping, no reverse engineering of private endpoints, no browser-session
+    automation as a substitute for an approved integration.
+[ ] docs/bdz-integration-review.md: review date, terms, API owner, supported
+    functions, authorization status, unresolved legal questions.
+[ ] docs/legal-compliance-matrix.md: requirement, why it applies, owner,
+    evidence, status, due date, launch blocker (yes/no).
+[ ] App never presented as an official BDZ product unless that is true.
+[ ] Mock provider clearly labelled "demo data" everywhere it is shown.
+[ ] Terms of service and privacy policy that match what the code actually does.
+[ ] Every account, domain, repo, store listing and cloud project owned by the
+    company/organization, not by an individual developer.
+
+
+---------------------------------------------------------------------
+2. DATA MODEL AND DATABASE (backend, once one exists)
+---------------------------------------------------------------------
+[ ] Schema designed deliberately (reviewed ERD), not improvised table by table.
+[ ] Forward AND rollback migrations; migrations that do not lock hot tables.
+[ ] Indexes on every query used by search, orders and tickets; tested against
+    realistic volumes (millions of rows), not 50 test rows.
+[ ] Connection pooling so traffic spikes do not exhaust the database.
+[ ] Nightly backups AND a tested restore (a backup never restored is a hope).
+[ ] Point-in-time recovery; RPO and RTO defined with the operator.
+[ ] Soft deletes for user-facing data where recovery matters.
+[ ] Server-side validation of all input (never only in the form).
+[ ] Money stored as integer minor units (stotinki/cents), never floats.
+[ ] Timestamps stored in UTC; Europe/Sofia handling defined and tested
+    (including DST changes and midnight-crossing journeys).
+[ ] Names with apostrophes, hyphens, Cyrillic, Latin, accents and emoji work in
+    every field, in storage, search, export and email.
+[ ] Pagination that still works on page 400.
+[ ] Data export for users, and imports (if any) that survive malformed CSVs.
+[ ] Retention rules, and code that actually deletes what the policy promises.
+
+
+---------------------------------------------------------------------
+3. AUTHENTICATION AND ACCOUNTS (only if accounts are built)
+---------------------------------------------------------------------
+Use a reputable identity provider; no custom cryptography.
+[ ] Sign up, email verification, sign in, sign out.
+[ ] Emails with "+" and unusual valid characters work at login.
+[ ] Password reset links expire and work exactly once.
+[ ] Session refresh, session timeout, and the ability to revoke all sessions
+    for one user.
+[ ] Refresh tokens only in Keychain/Keystore (SecureStore); never AsyncStorage.
+[ ] Rate limits on login and reset; lockouts that stop attackers without
+    permanently locking out legitimate users.
+[ ] No account enumeration through error messages or timing.
+[ ] Optional MFA with a recovery path for lost phones (if scope justifies it).
+[ ] Account deletion and data export flows (also required by app stores).
+[ ] Guest access to timetable, stations and map; no forced sign-up.
+[ ] Authorization enforced server-side on every private resource.
+[ ] Tests: user A cannot read user B's tickets by changing an ID in a request;
+    expired tokens rejected; revoked sessions rejected.
+[ ] If support tooling can "act as a user": audit trail on every use.
+
+
+---------------------------------------------------------------------
+4. TICKETING AND PAYMENTS  [TICKETING GATE]
+---------------------------------------------------------------------
+Remains disabled until BDZ authorization and a supported integration exist.
+Until then: mock TicketingProvider + labelled link to the official BDZ portal
+(only if approved by product/legal review).
+[ ] TicketingProvider interface; no screen depends on a concrete provider.
+[ ] Server-controlled order state machine:
+    draft -> price_confirmed -> pending_payment -> paid -> ticket_issued
+    plus payment_failed, issuance_failed, cancelled, refund_pending, refunded.
+[ ] Price and availability revalidated server-side right before payment.
+[ ] Provider-hosted, PCI-compliant checkout; the app and backend never see or
+    store raw card numbers or CVVs. Keep PCI scope minimal.
+[ ] Idempotency keys on purchase and payment calls (no double charges).
+[ ] De-duplication for repeated taps on "Pay".
+[ ] Payment status verified server-to-server; never trust a client callback.
+[ ] Webhooks: signature verification, retries, duplicate-delivery handling,
+    log of failed deliveries.
+[ ] Tickets issued only after the authoritative provider confirms.
+[ ] Reconciliation job + support procedure for "paid but no ticket".
+[ ] Refunds, credits, partial refunds as the provider supports them.
+[ ] Cancellation/refund/discount terms shown from current approved provider
+    data at purchase time; never hard-coded copy from a web page.
+[ ] Currency, rounding, VAT/tax rules verified with finance/legal.
+[ ] Invoices/receipts as legally required; reports finance can reconcile.
+[ ] Order audit trail without logging payment secrets.
+[ ] Sandbox end-to-end test before production; no live tests on real customers.
+
+
+---------------------------------------------------------------------
+5. SECURITY
+---------------------------------------------------------------------
+[ ] Threat model written before launch (docs/threat-model.md).
+[ ] Secrets out of code, repo, Git history, .env files in the repo, and AI chat
+    history. Rotate any key that was ever pasted into a config or chat.
+[ ] Remember: EXPO_PUBLIC_* values and map SDK keys are PUBLIC. Restrict map
+    keys by bundle ID/package name.
+[ ] Verify every package the AI installed exists and is the one intended
+    (typosquatting check); commit lockfile; no unreviewed dependency churn.
+[ ] Dependency and vulnerability scanning in CI.
+[ ] Input sanitization everywhere a user can type or a provider can send data.
+[ ] Protection against SQL injection, XSS, CSRF and the rest of the OWASP list
+    (OWASP MASVS for the mobile client, OWASP API Top 10 for the backend).
+[ ] File uploads (if any): scanned, size-limited, stored non-executable.
+[ ] CORS not "allow everything"; security headers on every response.
+[ ] HTTPS everywhere; certificate renewals automated and monitored.
+[ ] Encryption at rest and in transit.
+[ ] Least-privilege access for every person, service and AI agent; agents never
+    hold production credentials.
+[ ] Logs record who did what, never passwords, tokens or card numbers.
+[ ] Rate limits on public APIs that protect the service without blocking real
+    users; DDoS/abuse protection via infrastructure controls.
+[ ] Penetration test appropriate to risk before launch.
+[ ] Vulnerability disclosure process (security.txt / contact address).
+[ ] Incident response and breach-notification plan, incl. lost-device plan.
+[ ] Quarterly access reviews once a team exists.
+
+
+---------------------------------------------------------------------
+6. PRIVACY AND COMPLIANCE (GDPR / EU / Bulgaria)  [LAUNCH BLOCKER]
+---------------------------------------------------------------------
+This is an engineering checklist, not legal advice; a qualified Bulgarian/EU
+lawyer must review it.
+[ ] Controller/processor roles, lawful basis per purpose, privacy notice.
+[ ] Data minimization; no collection without a documented purpose.
+[ ] Consent for analytics/marketing separate from terms acceptance; no
+    preselected boxes; onboarding must not hide consent.
+[ ] GDPR deletion and export requests reach every table, backup policy and log.
+[ ] Data processing agreements with every vendor (hosting, email, payments,
+    analytics, crash reporting, any AI provider).
+[ ] Data residency decided (EU hosting) and documented.
+[ ] Children's use assessed; safeguards applied if needed.
+[ ] Location data: foreground permission only, only for a user-initiated
+    "nearby stations" feature, minimum retention, no location history in logs.
+[ ] Accessibility obligations reviewed (EU/Bulgarian rules).
+[ ] App Store and Google Play privacy labels, account-deletion path, support
+    contact and review notes accurate.
+[ ] Permission and IP clearance for logos, imagery, map assets, translations
+    and third-party datasets.
+[ ] Formal certifications (e.g. SOC 2, ISO 27001) only if a customer or
+    contract requires them; record the decision.
+
+
+---------------------------------------------------------------------
+7. MOBILE APP QUALITY (React Native + TypeScript)
+---------------------------------------------------------------------
+[ ] TypeScript strict mode, ESLint, Prettier; code a human can read.
+[ ] Runtime validation (Zod) of all provider/API responses.
+[ ] Empty, loading, error, offline, timeout and retry states on EVERY screen.
+[ ] Error messages a user can act on (never just "something went wrong").
+[ ] Forms keep typed values when one field fails validation.
+[ ] Destructive actions (clear favourites, delete account) ask for confirmation.
+[ ] Scheduled vs real-time vs cached vs demo information clearly labelled.
+[ ] Back button and deep links behave as users expect (station -> details).
+[ ] Notifications only if in scope, user-controllable, permission requested at
+    the moment of use.
+[ ] Performance: pages and lists usable on slow/hotel/rural train Wi-Fi and
+    mobile data; test on low-end Android devices and older iPhones.
+[ ] Crash reporting and error tracking that groups duplicates, with PII
+    scrubbing.
+[ ] App versioning and a forced-update/minimum-version mechanism.
+[ ] Offline caching of static station data with expiry and "stale" labels.
+
+
+---------------------------------------------------------------------
+8. LOCALIZATION (bg + en from release one)
+---------------------------------------------------------------------
+[ ] All user-visible strings in src/i18n/locales/{bg,en}.json; none in screens.
+[ ] Device-locale detection on first launch; language switch in Settings;
+    choice persisted; reliable fallback language.
+[ ] Dates, times, numbers, currency, validation, ticket states, legal text and
+    accessibility labels localized.
+[ ] Reviewed translations; no unreviewed machine translation for legal or
+    payment text.
+[ ] Official station display names kept; aliases only when licensed/verified.
+[ ] Long translations and large text scaling tested in both languages.
+[ ] Cyrillic and Latin search both work (and mixed input).
+
+
+---------------------------------------------------------------------
+9. MAP AND STATIONS
+---------------------------------------------------------------------
+[ ] Map SDK chosen after reviewing licensing, costs, attribution, privacy,
+    offline behavior and rate limits; documented in docs/decisions.md.
+[ ] Verified, licensed station dataset; show only verified data.
+[ ] List/map toggle as the accessible alternative; works without location
+    permission.
+[ ] No tile scraping; tile caching only if the provider permits it.
+[ ] Required map attribution displayed.
+[ ] A line on the map never implies an operational route or live service.
+[ ] Deep links from station and journey results.
+
+
+---------------------------------------------------------------------
+10. ONBOARDING AND UX
+---------------------------------------------------------------------
+[ ] 3-4 screen skippable guide: Find a train / Check your trip / Tickets /
+    Map and language; Skip, Next, page indicator, "Start using the app".
+[ ] Completion saved locally; reopenable from Settings -> Help.
+[ ] No permission prompts during onboarding.
+[ ] Illustrations/screenshots only if they match the real UI.
+[ ] Navigation limited to Search, Map, My trips/Tickets, Settings.
+[ ] VoiceOver and TalkBack tested on key flows; contrast, touch targets and
+    dynamic font scaling verified.
+[ ] Undo or confirmation wherever an action cannot be reversed.
+
+
+---------------------------------------------------------------------
+11. BACKEND, INFRASTRUCTURE AND DEVOPS (if a backend is justified)
+---------------------------------------------------------------------
+Do not add a backend without a verified need (secrets, caching, ticketing).
+[ ] Dev, staging and production environments that match each other.
+[ ] Infrastructure as code; nothing that lives only in one person's memory.
+[ ] CI/CD: tests, type check, lint, dependency scan before any deploy.
+[ ] One-click rollback; zero-downtime deploys; feature flags (ticketing must
+    sit behind a flag that is OFF until the gate passes).
+[ ] Stateless API instances, load balancer, autoscaling.
+[ ] CDN for static assets; public, non-personal timetable data cached with
+    explicit freshness; authenticated responses never in shared caches.
+[ ] Background job queue for email, notifications, reconciliation.
+[ ] Retries with exponential backoff and jitter; circuit breakers; dead-letter
+    queue; cron/scheduled jobs that do not double-run on a second server.
+[ ] Cache invalidation defined for every cache.
+[ ] DNS, SSL renewals and domain renewals automated and alerting.
+[ ] Email deliverability: SPF, DKIM, DMARC; bounce and complaint handling.
+[ ] Storage lifecycle rules; no paying forever for temp files.
+[ ] COST ALERTS and spending caps from day one (runaway loops and misconfigured
+    agents are real; set budgets for cloud, maps, email, SMS and any AI API).
+[ ] Disaster recovery plan, written down and tested at least yearly; second
+    region only if the contract requires availability one region can't give.
+[ ] Versioned public API; API keys revocable; third-party API change plan.
+[ ] Graceful degradation: timetable/map browsing survives non-critical outages.
+
+
+---------------------------------------------------------------------
+12. OBSERVABILITY AND OPERATIONS
+---------------------------------------------------------------------
+[ ] Structured, searchable logs with correlation IDs; no secrets/PII in logs.
+[ ] Error tracking, metrics, dashboards (latency, error rate, throughput,
+    saturation), distributed tracing for multi-service requests.
+[ ] Uptime checks from outside the network; alerts tuned so they page a human
+    only for real problems.
+[ ] On-call owner named; runbooks for each alert.
+[ ] Blameless postmortems that produce concrete changes.
+[ ] Public status page or documented status channel.
+[ ] Admin/ops panel and support tooling so support does not need engineering
+    for routine questions; changelog users can read.
+
+
+---------------------------------------------------------------------
+13. SCALE AND LOAD TESTING  [SCALE GATE]
+---------------------------------------------------------------------
+Target: designed and load-tested for up to 1,000,000 concurrent active clients.
+Never state that this is supported until the agreed test passes in a
+representative environment. A single Docker Compose stack is local dev only.
+[ ] docs/scale-and-load-test-plan.md covering: requests per user per minute,
+    peak search and checkout rates, read/write mix and cache hit rate, dataset
+    sizes and timetable update patterns, tool/environment/duration/ramp-up,
+    p50/p95/p99 latency, error rate, saturation, cost, bottlenecks and fixes.
+[ ] Initial SLO targets to validate: public search p95 < 500 ms for cached
+    queries (excluding upstream latency); 99.9% monthly availability for the
+    agreed scope.
+[ ] Separate ticket-purchase burst test; zero duplicate charges/orders under
+    retries.
+[ ] Soak tests; repeatable regression load test in CI or scheduled.
+[ ] Sharding/partitioning only when measurements justify it.
+[ ] Backpressure, timeouts and rate limits tested under overload.
+
+
+---------------------------------------------------------------------
+14. TESTING
+---------------------------------------------------------------------
+[ ] Unit tests written against the intended logic (filtering, validation, time
+    formatting, provider mapping, cache rules, order state machine).
+[ ] Component tests: search form, station picker, results, errors, favourites.
+[ ] Integration tests for every third-party API with sandbox/mock fixtures.
+[ ] End-to-end tests: sign-up, search -> results -> details, checkout (sandbox).
+[ ] Regression tests so fixing one bug does not reintroduce an old one.
+[ ] Malformed provider payload, offline, empty result, long station name and
+    Bulgarian text cases.
+[ ] Both languages across onboarding, auth, search, map, ticketing and errors.
+[ ] Test data that looks real but contains no production personal data.
+[ ] Physical-device testing on at least one Android and one iOS device.
+[ ] Verify that what an agent says it tested was actually run (read the output).
+[ ] Privacy test: no tokens, passwords, payment data or location history in
+    logs.
+
+
+---------------------------------------------------------------------
+15. CODE HEALTH AND HANDOVER
+---------------------------------------------------------------------
+[ ] Code review on every change; a human reads every line before it ships.
+[ ] Branching strategy; protected main branch; required checks.
+[ ] Delete dead code and abandoned attempts left by earlier agent runs.
+[ ] Split oversized files; no 2,000-line append-only files.
+[ ] Architecture decisions recorded with reasons (docs/decisions.md).
+[ ] README: prerequisites, setup, environment variables, tests, builds; a new
+    engineer can run it locally in under an hour.
+[ ] Regular dependency and framework upgrades; Expo SDK / React Native upgrade
+    plan before old versions lose support.
+[ ] Bus factor above one: at least two people can build, release and operate.
+[ ] Release credentials, signing keys and keystores only in protected CI
+    secrets; documented recovery if they are lost.
+
+
+---------------------------------------------------------------------
+16. AI-ASSISTED DEVELOPMENT RULES (apply to the agents themselves)
+---------------------------------------------------------------------
+[ ] Agents never invent APIs, endpoints, schedules, credentials or statuses.
+[ ] Agents never receive production credentials.
+[ ] Any secret that appears in an agent session is treated as leaked: rotate it.
+[ ] Agent-written fixes are reviewed for side effects before merge.
+[ ] Any action that is irreversible (deploys to production, data deletion,
+    payments, store submission) needs explicit human approval.
+[ ] Agents report blockers (API access, Apple signing, devices, credentials)
+    in docs/decisions.md and continue with mock-based work.
+[ ] If AI features are ever added to the product: prompt-injection protection,
+    no personal data in prompts without a DPA, per-user spend cap, a fallback
+    when the provider is down, evals, and human approval for irreversible
+    actions.
+
+
+---------------------------------------------------------------------
+17. HUMAN ROLES THIS PROJECT STILL NEEDS
+---------------------------------------------------------------------
+Name an owner for each before launch:
+- Senior engineer / tech lead: reviews agent code, owns hard debugging, says no
+  to features that break others.
+- Backend engineer: data model, migrations, order/payment integrity.
+- DevOps engineer: deploys, rollbacks, infrastructure, cloud bill, scaling.
+- Security / compliance owner: threat model, GDPR, audits, patching.
+- QA: verifies what agents claim they tested, device matrix, accessibility.
+- Mobile engineer with Apple/Google store experience: signing, review, release.
+- On-call responder and support owner.
+- Legal counsel (Bulgarian/EU) for BDZ agreement, terms, privacy, consumer and
+  payment law.
+- Product owner for the BDZ relationship and the ticketing go/no-go decision.
+
+
+---------------------------------------------------------------------
+GO / NO-GO SUMMARY
+---------------------------------------------------------------------
+Public release (timetable, stations, map, onboarding, bg/en):
+  Needs sections 1, 5, 6, 7, 8, 9, 10, 12, 14, 15 complete.
+In-app ticket sales:
+  Additionally needs sections 3, 4 and written BDZ authorization. Disabled by
+  default via feature flag until the legal and technical gate passes.
+Claiming "supports 1,000,000 concurrent users":
+  Only after section 13 passes in a representative environment.
