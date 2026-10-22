@@ -1,0 +1,745 @@
+# BDZ Train Companion App — Architecture Decision Log
+
+Running decision log for the project. One entry per decision, newest last.
+Entries follow: **ID — Title**; *Date*; *Status*; Context; Decision; Consequences.
+
+- Status values: `Accepted`, `Superseded`, `Open`, `Noted`, `Rejected`.
+- Conflicts between `plan.md` and `addbeforerelease.txt`: **the stricter rule
+  wins and the conflict is recorded here** (addbeforerelease.txt preamble).
+- Nothing in this log claims a build, test, integration or authorization that
+  has not actually happened. Unknowns are listed as unknowns.
+
+| ID | Title | Status |
+|----|-------|--------|
+| DEC-001 | Project workflow: Expo + Expo Router | Accepted |
+| DEC-002 | Train data source: mock-only until a lawful source is documented | Accepted |
+| DEC-003 | Backend: not justified now | Accepted |
+| DEC-004 | Feature flags (ticketing OFF by default) | Accepted |
+| DEC-005 | Folder structure | Accepted |
+| DEC-006 | Domain model, provenance labelling, time and money conventions | Accepted |
+| DEC-007 | Provider interfaces, errors, timeout/cancellation/retry, Zod at the boundary | Accepted |
+| DEC-008 | Order state machine, idempotency, duplicate-callback behaviour | Accepted |
+| DEC-009 | Dependency policy and verified baseline | Accepted |
+| DEC-010 | Checklist file naming discrepancy + conflict rule | Noted |
+| DEC-011 | Capacity-claims policy ("1,000,000 concurrent users") | Accepted |
+| DEC-012 | Map SDK selection | Open |
+| DEC-013 | Phase 0 integration record (lead verification + reconciliation) | Noted |
+
+---
+
+## DEC-001 — Project workflow: Expo + Expo Router
+
+- **Date:** 2026-10-22
+- **Status:** Accepted
+
+**Context.** plan.md §5 recommends "Expo + Expo Router, unless a verified native
+requirement makes bare React Native preferable". The MVP needs navigation
+(search → results → details, favourites), local storage, notifications *only if
+in scope* (currently out of scope), a map (later phase), and store-distributable
+iOS + Android builds. Docker on Linux cannot build native iOS (plan.md §2,
+rule 8) — regardless of workflow, iOS artifacts require macOS/Xcode or a cloud
+build service.
+
+**Decision.** Use **Expo (managed workflow, prebuild-capable) with Expo Router**
+as the project workflow and file-based navigation. iOS builds go through EAS
+Build or a macOS runner; Android builds through EAS or the documented
+Docker/Gradle path (plan.md §7).
+
+**Evidence checked 2026-10-22** (versions verified before stating them,
+rule 11): Expo SDK 58 is the current stable line (`expo@58.0.x`, MIT license;
+`expo-router@58.0.x`; Expo SDK 58 targets React Native 0.88 / React 19.3,
+minimum Node 22.13). Exact pins are set in the scaffold wave (DEC-009).
+
+**Consequences.**
+
+- (+) No hand-maintained native toolchain for routine development; over-the-air
+  config updates and EAS build paths already match plan.md §7's guidance to
+  "prefer Expo's supported build workflows".
+- (+) Deep links (plan.md 17.5, checklist §9) come from the router's file-based
+  route names.
+- (+) `expo-secure-store` (Keychain/Keystore) is available for the session
+  tokens required by plan.md 17.2 — never AsyncStorage (checklist §3).
+- (−) EAS Build is a third-party dependency for iOS/Android artifacts; a
+  self-hosted macOS runner remains an alternative. Free-tier EAS constraints are
+  **unverified** — the owner must confirm the plan/quotas before relying on it.
+- (−) If a verified native requirement appears that Expo cannot support (none
+  known today), we fall back to bare React Native + React Navigation — that is a
+  **new decision entry**, not a silent change.
+
+---
+
+## DEC-002 — Train data source: mock-only until a lawful source is documented
+
+- **Date:** 2026-10-22
+- **Status:** Accepted
+
+**Context.** plan.md §4 requires identifying a lawful, reliable data source
+before building journey-search screens. plan.md 17.1 lists public BDZ web
+resources (ticketing portal, terms, help pages) but states explicitly that
+public documentation is **not** permission to reuse BDZ APIs, scrape the portal,
+or reverse engineer private endpoints. What is **not verified** in this session:
+
+- whether any official BDZ API / open-data feed exists for journey search;
+- terms permitting automated access, rate limits, fields, update frequency,
+  attribution requirements;
+- any authorization status or contact with BDZ (no contact has been made by
+  this agent).
+
+`docs/bdz-integration-review.md` and `docs/legal-compliance-matrix.md` were
+created on 2026-10-22 by the concurrent discovery/legal agent; both record
+data-source status **mock-only**, consistent with this decision. They remain
+owned by human roles (checklist §§1, 17): no lawyer has reviewed them and no
+human owner is named yet. (This entry's first draft said the two files did not
+exist; they appeared in `docs/` while this log was being written — sibling
+work, not deleted or modified by this agent.)
+
+**Decision.** The app develops against **MockTrainDataProvider only**
+(demo-labelled). No live endpoints, no scraped data, no browser automation.
+`LiveTrainDataProvider` is not created until this decision is superseded by an
+entry recording: source owner, written permission or official open feed, terms,
+rate limits, fields, update frequency, attribution, and review date.
+
+**Consequences.**
+
+- (+) Nothing invented; every schedule-like value in the app is visibly "demo
+  data" (checklist §1).
+- (−) MVP cannot show real timetables until a source is approved. If no source
+  is approved, plan.md §4.5 applies: ship with clearly labelled demo data and/or
+  a station directory and **do not imply results are current**.
+- Open questions for the human owner: BDZ contact/authorization status; whether
+  a licensed station dataset exists for the map (DEC-012).
+
+---
+
+## DEC-003 — Backend: not justified now
+
+- **Date:** 2026-10-22
+- **Status:** Accepted
+
+**Context.** plan.md §6: "Do not introduce a backend unless a verified data
+source, secret, caching, or operational need justifies it." Checklist §11
+restates it. Current scope: journey search against a mock provider, station
+directory (bundle or on-device cache), favourites/recent searches (local only),
+ticketing **disabled** (DEC-004), accounts **gated** (DEC-004), no push
+notifications, no analytics.
+
+**Decision.** **No backend in this phase.** The mobile app stands alone:
+bundled/licensed station data, mock provider, local persistence.
+
+**Revisit triggers** — any one of these starts a new decision entry:
+
+1. An approved live data source requires a secret/credential or a proxy
+   (plan.md §6: never embed private API keys in the app) — the trigger is the
+   *secret*, not convenience.
+2. Upstream rate limits/caching needs exceed what on-device caching can do.
+3. The TICKETING GATE passes (orders, payments, webhooks, reconciliation are
+   inherently server-side — plan.md 17.3).
+4. Accounts are approved (auth requires server-side authorization — plan.md 17.2).
+5. Operational need: remote feature flags, forced-update/minimum-version service
+   (checklist §7), or support tooling (checklist §12).
+
+**If a backend is later justified**, it must already satisfy plan.md 17.4 and
+checklist §11 before design starts: stateless API instances behind a load
+balancer with autoscaling; CDN for static assets/map tiles where licensing
+permits; cache for public non-personal data with explicit freshness rules and
+**never** shared caching of authenticated responses; managed HA database with
+indexes, connection pooling, backups + tested restore, PITR, RPO/RTO agreed with
+the operator; background job queue (email, notifications, reconciliation) with
+retries/backoff/jitter, circuit breakers and a dead-letter queue; idempotency
+and transactional consistency for orders/payments (never cache payment truth);
+rate limits, timeouts, backpressure; observability (metrics, structured logs,
+traces, dashboards, alerts, correlation IDs); DDoS/abuse protection via
+infrastructure controls; graceful degradation of timetable/map browsing; dev,
+staging and production environments that match; infrastructure as code; cost
+alerts and spending caps from day one. Migrations: forward AND rollback, no hot
+table locks; money in integer minor units; timestamps in UTC with
+Europe/Sofia handling tested (checklist §2).
+
+**Consequences.**
+
+- (+) No infra to build/secure/operate before a verified need; no secrets in the
+  mobile bundle.
+- (−) No remote flags, no server-side caching, no accounts, no ticketing until a
+  trigger fires. This is by design.
+- (−) The capacity plan (docs/scale-and-load-test-plan.md) describes a system
+  that does not exist yet; it is a design target, not a measurement.
+
+---
+
+## DEC-004 — Feature flags (ticketing OFF by default)
+
+- **Date:** 2026-10-22
+- **Status:** Accepted
+
+**Context.** Checklist §11: "feature flags (ticketing must sit behind a flag
+that is OFF until the gate passes)". plan.md 17.1/17.9: in-app ticket sales
+remain disabled until the legal and technical authorization gate passes.
+Accounts are conditional (plan.md 17.2). Analytics needs a privacy review
+(checklist §6).
+
+**Decision.** Feature flags are defined in `src/types/feature-flags.ts`
+(`FEATURE_FLAG_DEFINITIONS`) with these defaults:
+
+| Flag | Default | Gate before enabling |
+|------|---------|----------------------|
+| `ticketSales` | **OFF** | TICKETING GATE: written BDZ authorization + supported integration + sandbox e2e + human go/no-go |
+| `officialBdzTicketingLink` | **OFF** | Product/legal approval of the labelled external link (plan.md 17.1) |
+| `accounts` | **OFF** | Product approval + identity provider chosen + security review; guest access never requires an account |
+| `realTimeData` | **OFF** | Verified, authorised live source (DEC-002) |
+| `analytics` | **OFF** | Privacy review + separate consent design |
+| `mapStationDiscovery` | ON | Map SDK decision (DEC-012) + licensed station dataset |
+| `onboarding` | ON | none — public feature |
+
+Flags marked "human approval" (`changeRequiresHumanApproval: true`) may only be
+flipped by a named human owner after the gate evidence is recorded — an agent
+must not enable them (rule 10: irreversible actions need explicit human
+approval). Until a backend exists (DEC-003), flags come from committed local
+defaults; dev-only overrides must not ship in release builds.
+
+**Consequences.**
+
+- (+) Purchase screens can be fully built and tested against the mock provider
+  without any risk of a user reaching a "buy" flow.
+- (−) Any UI for ticketing must be built behind the flag from day one; no
+  "quick enable" path that bypasses the gate.
+
+---
+
+## DEC-005 — Folder structure
+
+- **Date:** 2026-10-22
+- **Status:** Accepted
+
+**Context.** plan.md §6 gives the base tree. Section 17 adds map, onboarding,
+auth and tickets features. The scaffold wave (Phase 1) creates the project
+files; this entry fixes the `src/` layout so interface files placed now
+(`src/types/`, `src/services/`) stay valid.
+
+**Decision.** Feature-oriented layout, presentation separated from data access
+(plan.md §6). Route files live in `src/app/` (Expo Router, DEC-001):
+
+```text
+src/
+  app/                    # Expo Router route files / screen entry points
+    (tabs)/               # Search | Map | My trips/Tickets | Settings (plan.md 17.7)
+  components/             # reusable UI (buttons, cards, states)
+  features/
+    journey-search/
+    journey-results/
+    journey-details/
+    stations/
+    favourites/
+    map/                  # added: map + station discovery (plan.md 17.5)
+    onboarding/           # added: first-launch guide (plan.md 17.7)
+    auth/                 # added: sign-in/up/reset (plan.md 17.2; behind flag)
+    tickets/              # added: orders/tickets UI (plan.md 17.3; behind flag)
+  services/
+    common/               # RequestOptions, retry policy (DEC-007)
+    train-data/           # TrainDataProvider.ts + implementations (DEC-002/007)
+    ticketing/            # TicketingProvider.ts + mock implementation (DEC-008)
+    api/                  # future HTTP client (only with a backend, DEC-003)
+    storage/              # local persistence adapters (AsyncStorage/SecureStore)
+  hooks/
+  store/
+  theme/
+  i18n/
+    locales/              # bg.json, en.json (plan.md 17.6)
+  utils/
+  types/                  # domain models (DEC-006)
+  test/
+assets/
+tests/
+scripts/
+docs/
+Dockerfile
+docker-compose.yml
+.env.example              # names + safe placeholders only (plan.md §7)
+```
+
+Rules carried over from plan.md §6: screens never call provider endpoints
+directly; provider-specific mapping stays inside `services/`; typed domain
+models + runtime validation for external responses; no secrets in the bundle or
+Git history.
+
+**Consequences.**
+
+- (+) Interface files added in Phase 0 (`src/types/`, `src/services/`) need no
+  move when the scaffold lands.
+- (−) `src/app/` route names are the deep-link contract (checklist §9) —
+  renaming routes later needs a decision entry.
+
+---
+
+## DEC-006 — Domain model, provenance labelling, time and money conventions
+
+- **Date:** 2026-10-22
+- **Status:** Accepted
+
+**Context.** plan.md §4 suggests `JourneySearch`, `TrainSegment`, `Journey`,
+`TrainDataProvider`. Sections 3 and 17 need transfers/legs, station records,
+favourites/recent searches, orders and tickets, and — critically — a way to
+guarantee rule 6 (demo / scheduled / cached-stale / real-time must never be
+conflated). Checklist §2 demands UTC timestamps with tested Europe/Sofia
+handling (incl. DST and midnight-crossing journeys) and money as integer minor
+units.
+
+**Decision.** Extend the plan.md §4 types in `src/types/` (same names and core
+fields) and add:
+
+- `src/types/provenance.ts` — `InformationProvenance` discriminated union with
+  kinds `demo | scheduled | cached-stale | real-time`. Every journey and station
+  carries provenance; the UI renders a label per kind. `real-time` is **reserved
+  and unproducible** until DEC-002 is superseded; the mock provider emits
+  `demo` only. `cached-stale` carries `cachedAt`/`expiresAt`/`staleReason`.
+- `src/types/journey.ts` — `TrainSegment` keeps plan.md fields and gains
+  `kind: 'train'`, optional `departureDayOffset`/`arrivalDayOffset`
+  (midnight-crossing), optional `trainCategory`/`trainName`/`providerStatus`
+  (verbatim from the source, never invented). `TransferSegment`
+  (`kind: 'transfer'`) models connections incl. `stationChangeRequired`.
+  `JourneyLeg = TrainSegment | TransferSegment`; `Journey` keeps `segments`
+  (train legs, plan.md compatibility) and adds `legs` (full timeline, source of
+  truth) with the invariant `segments === legs.filter(l => l.kind === 'train')`.
+- `src/types/station.ts` — `Station` (official display name, aliases **only**
+  when the data source defines them), `StationQuery`, versioned
+  `StationDirectory` with `fetchedAt`/`expiresAt`/`attribution`.
+- `src/types/favourites.ts` — `FavouriteStation`, `FavouriteRoute`,
+  `RecentSearchRecord`, `LocalStorePolicy` (spec defaults: 20 recent searches,
+  100 favourites, 90-day TTL) and a versioned `LocalStoreSnapshot`.
+- `src/types/order.ts`, `src/types/ticket.ts` — see DEC-008.
+
+Conventions: timestamps ISO-8601 **UTC**; user-facing wall-clock times
+`HH:mm` **Europe/Sofia**; travel dates interpreted in Europe/Sofia; day offsets
+carry midnight crossings; money is integer minor units in a closed currency
+union (`BGN | EUR`) — extend only after finance/legal verification
+(checklist §4). Local storage is re-validated on read (it is untrusted input).
+
+**Consequences.**
+
+- (+) The provenance union makes rule 6 a type-level property; a screen cannot
+  render data without knowing its labelling.
+- (−) Some duplication between `segments` and `legs`; mitigated by the stated
+  invariant + a Phase 4 test.
+- Open: exact station-dataset schema will be reconciled with the licensed
+  dataset when one is obtained (may add fields; names here will not change).
+
+---
+
+## DEC-007 — Provider interfaces, errors, timeout/cancellation/retry, Zod at the boundary
+
+- **Date:** 2026-10-22
+- **Status:** Accepted
+
+**Context.** plan.md §4.3/§6: typed `TrainDataProvider` so the UI does not
+depend on one provider; treat provider data as untrusted; runtime validation,
+timeouts, cancellation, caching, error mapping (Phase 4). Checklist §7 requires
+Zod runtime validation of all provider/API responses. plan.md 17.1 requires a
+`TicketingProvider` interface so an approved implementation can be added later
+without rewriting screens.
+
+**Decision.**
+
+- `src/services/train-data/TrainDataProvider.ts` and
+  `src/services/ticketing/TicketingProvider.ts` define the seams. Screens call
+  these interfaces only; all provider-specific mapping stays in `services/`.
+- Every method takes `RequestOptions` (`src/services/common/RequestOptions.ts`):
+  `AbortSignal` cancellation → `ProviderError{code:'cancelled'}`; per-attempt
+  timeout budget → `'timeout'`; bounded retries with exponential backoff **and
+  jitter** for idempotent reads only (default: 3 attempts, 300 ms base, 5 s cap,
+  retry on timeout/network/upstream_error/rate_limited). Ticketing calls use
+  `NO_AUTO_RETRY_POLICY` — duplicates are handled by idempotency keys (DEC-008),
+  never by blind retries.
+- All failures reject with `ProviderError` (discriminated by `code` in
+  `src/types/errors.ts`), mapped to localised, actionable UI messages
+  (checklist §7). Raw upstream codes are diagnostics only.
+- **Runtime validation:** Zod schemas mirror the types in `src/types/` and parse
+  every external payload **before** mapping (spec in Appendix B). A schema
+  violation rejects with `'invalid_response'`; missing fields become
+  `null`/absent and are shown as "unknown" — never invented (plan.md §4).
+- Capabilities (`TrainDataProviderCapabilities`,
+  `TicketingProviderCapabilities`) let the UI hide features a provider cannot
+  honestly support (e.g. no real-time badges without `'real-time'` provenance).
+
+**Consequences.**
+
+- (+) Swapping mock → authorised provider touches `services/` only.
+- (+) Timeouts/cancellation/retries have one implementation, one test surface.
+- (−) Zod is not imported in this phase: the dependency is not installed yet.
+  The `.ts` files are plain TypeScript on purpose; schemas are specified
+  (Appendix B) and implemented when Zod lands in the scaffold wave.
+
+---
+
+## DEC-008 — Order state machine, idempotency, duplicate-callback behaviour
+
+- **Date:** 2026-10-22
+- **Status:** Accepted (spec only — implementation blocked by the TICKETING GATE)
+
+**Context.** plan.md 17.3 and checklist §4 require a server-controlled order
+state machine, idempotency keys, server-to-server payment verification,
+reconciliation for "paid but no ticket", and an audit trail without payment
+secrets.
+
+**Decision.** The state machine is specified in `src/types/order.ts`
+(`OrderStateName`, per-state payloads, `ORDER_STATE_TRANSITIONS`):
+
+```text
+draft → price_confirmed → pending_payment → paid → ticket_issued
+```
+
+with failure/edge states `payment_failed`, `issuance_failed`, `cancelled`,
+`refund_pending`, `refunded`. Legal transitions (single source of truth, also
+enforced by the mock provider and its tests):
+
+| From | Allowed to |
+|------|-----------|
+| draft | price_confirmed, cancelled |
+| price_confirmed | pending_payment, cancelled |
+| pending_payment | paid, payment_failed, cancelled |
+| paid | ticket_issued, issuance_failed, refund_pending |
+| payment_failed | pending_payment (explicit retry), cancelled |
+| issuance_failed | ticket_issued (reconciliation succeeds), refund_pending |
+| ticket_issued | refund_pending |
+| refund_pending | refunded, ticket_issued (refund rejected — order stands) |
+| cancelled | — (terminal) |
+| refunded | — (terminal) |
+
+Any transition not in the table is rejected (`conflict`). States carry typed
+payloads (e.g. `paid` has `paymentReference` + `paidAt`; `issuance_failed`
+records `paidAt` so the reconciliation job knows money moved).
+
+**Idempotency.** Every state-changing call (`createOrder`, `confirmPrice`,
+`initiatePayment`, `cancelOrder`, `requestRefund`) carries a client-generated
+`IdempotencyKey` (UUID v4). Server/provider semantics: the first request with a
+key executes; **replays with the same key return the stored outcome and never
+execute again** (no double charge, no second order). Keys are scoped per
+operation and retained at least as long as the order's retry window (exact
+retention: to be set with the payment provider — UNVERIFIED). Repeated taps on
+"Pay" de-duplicate client-side *and* server-side via the same key
+(checklist §4).
+
+**Duplicate/delayed callbacks.** Payment callbacks arrive server-side only
+(signature verification, replay/duplicate-delivery handling, failed-delivery
+log — checklist §4). Rules:
+
+1. Callbacks are hints to **re-read** authoritative provider state; the state
+   machine advances only from verified server-to-server status, never from a
+   client redirect or a callback payload alone.
+2. A callback for an order already in the target state (or beyond it) is
+   acknowledged and discarded — transitions are **monotonic** along the table;
+   a duplicate `paid` callback cannot move `ticket_issued` backwards.
+3. Late callbacks after `cancelled`/`refund_pending` are queued for the
+   reconciliation job, not applied blindly.
+4. Out-of-order callbacks (`ticket_issued` before `paid` observed) are
+   reconciled by fetching full order state from the authoritative provider.
+5. `paid` but not `ticket_issued` within the agreed window → `issuance_failed`
+   → reconciliation job + support procedure (plan.md 17.3).
+6. The app polls `getOrder` with bounded attempts/backoff after returning from
+   checkout and renders "payment being confirmed" for unsettled states instead
+   of guessing.
+
+Audit: `Order.history` records from/to/actor/timestamp/idempotencyKey per
+transition. **Never** log payment secrets — the app never receives card data at
+all (no such fields exist in the types; provider-hosted checkout only).
+
+**Consequences.**
+
+- (+) The mock provider (Appendix A) can be built to the exact same contract
+  now; the authorised implementation drops in later.
+- (−) Nothing here is implemented yet; this is a spec. No payment, sandbox or
+  otherwise, has been tested by this agent.
+
+---
+
+## DEC-009 — Dependency policy and verified baseline
+
+- **Date:** 2026-10-22
+- **Status:** Accepted
+
+**Context.** Rule 11: prefer boring, maintained technology; check current
+stable versions, compatibility, maintenance status and license **before**
+recommending; state versions only after checking. Rule 12: verify every named
+package exists and is the intended one.
+
+**Decision.** Phase 0 adds **no dependencies** (this wave writes only types and
+specs). Candidate dependencies — each to be re-verified and pinned in the
+scaffold wave — with the verification actually done today where a version is
+stated:
+
+| Package | Role | Checked 2026-10-22 |
+|---------|------|--------------------|
+| `expo` | SDK / workflow (DEC-001) | ✅ current stable line **SDK 58** (`expo@58.0.x`, e.g. 58.0.17), **MIT**, actively maintained (patch releases daily) |
+| `expo-router` | file-based navigation | ✅ `expo-router@58.0.x` tracks SDK 58, MIT |
+| `zod` | runtime validation at boundaries (DEC-007) | ✅ **4.6.7**, **MIT**, actively maintained; Zod 4 is the stable line |
+| `k6` (Grafana) | load-test tooling (docs/scale-and-load-test-plan.md) | ✅ stable **2.1.0** (2026-06-30), **AGPL-3.0** — acceptable as internal test tooling that is never linked into the product; do not modify/distribute k6 itself without understanding the AGPL obligations |
+| `@tanstack/react-query` | server state (plan.md §5) | candidate — version/license check at scaffold wave |
+| `react-hook-form` | forms (plan.md §5) | candidate — version/license check at scaffold wave |
+| `@react-native-async-storage/async-storage` | local persistence | candidate — verify exact package name (typosquatting check) + version/license |
+| `expo-secure-store` | tokens in Keychain/Keystore (checklist §3) | candidate — ships with the Expo SDK line |
+| `react-native-paper` **or** a small custom design system | UI (plan.md §5) | undecided — decide in Phase 2 with version/license check |
+| Jest + React Native Testing Library | tests (plan.md §5) | candidate — versions per Expo SDK compatibility |
+| ESLint + Prettier + typescript | quality (plan.md §5) | candidate — typescript strict mode mandatory |
+
+Policy: commit the lockfile; no unreviewed dependency churn (plan.md §5);
+dependency + vulnerability scanning in CI (checklist §5); **typosquatting check
+for every added package** (checklist §5). Supply-chain note: the `zod`
+repository had malicious commits pushed on 2026-09-21 which were reverted the
+same day and, per the maintainers, were **never published to npm** (verified in
+the zod release notes, 2026-10-22) — a concrete reminder to pin versions, keep
+the lockfile, and review release notes.
+
+**Consequences.**
+
+- (+) No version numbers are locked in prematurely.
+- (−) The scaffold wave owns real pinning; until then nothing in this repo is
+  installable — by design (another agent owns the scaffold).
+
+---
+
+## DEC-010 — Checklist file naming discrepancy + conflict rule
+
+- **Date:** 2026-10-22
+- **Status:** Noted
+
+**Context.** The lead brief refers to `agent-production-checklist.txt`; the
+file actually present in the repository root is `addbeforerelease.txt`
+(verified: `ls /home/kaloyan/BDJ` shows only `plan.md` and
+`addbeforerelease.txt`).
+
+**Decision.** They are the same document; `addbeforerelease.txt` is the
+authoritative copy in this repo. Future references should cite the actual
+filename (plus section number). If a file named `agent-production-checklist.txt`
+is later added, diff it against `addbeforerelease.txt` before trusting either.
+
+**Consequences.** Per the checklist preamble: where it and `plan.md` conflict,
+**the stricter rule wins and the conflict is recorded in this log**. No
+conflicts have been identified so far; both documents are compatible as read.
+
+---
+
+## DEC-011 — Capacity-claims policy ("1,000,000 concurrent users")
+
+- **Date:** 2026-10-22
+- **Status:** Accepted
+
+**Context.** plan.md 17.4 and checklist §13 set a capacity *goal* of up to
+1,000,000 concurrent active clients and forbid claiming it before an agreed
+load test passes in a representative environment (SCALE GATE).
+
+**Decision.** No document, screen, README, store listing or agent report may
+state or imply that the system "supports 1,000,000 concurrent users" until:
+
+1. the agreed load test described in `docs/scale-and-load-test-plan.md` has
+   actually been run in a representative (production-like) environment,
+2. its results are recorded in that document with real numbers, and
+3. a human owner signs off.
+
+Until then the only permitted phrasing is "designed and load-tested for up to
+1,000,000 concurrent active clients — **load test not yet run**" and the SLO
+numbers are labelled **targets, not guarantees**. A single Docker Compose stack
+is local development only, never a production-capacity argument
+(checklist §13).
+
+**Consequences.**
+
+- (+) Marketing/legal exposure controlled by an explicit gate.
+- (−) The scale document is full of `ASSUMPTION` labels until measurements
+  exist — expected and required.
+
+---
+
+## DEC-012 — Map SDK selection
+
+- **Date:** 2026-10-22
+- **Status:** Open (decision deferred)
+
+**Context.** plan.md 17.5 and checklist §9 require a map SDK chosen after
+reviewing mobile SDK support, offline behaviour, costs, attribution, data
+licensing, privacy and rate limits, and the choice documented here. The map
+feature is behind the `mapStationDiscovery` flag (default ON in code, but the
+feature cannot ship without this decision + a licensed station dataset).
+
+**Decision.** **Not decided.** No candidate is recommended yet because the
+required review (licensing, tile caching rights, cost, attribution, privacy,
+rate limits) has not been performed by this agent. To be decided by a research
+task before `features/map/` is built; record the chosen SDK, its license, key
+handling (map SDK keys are **public** identifiers — restrict by bundle
+ID/package name, checklist §5) and attribution requirements in a new entry.
+
+**Consequences.** Map UI work is blocked on this entry; list-based station
+discovery is not blocked and must exist regardless (accessible alternative,
+checklist §9).
+
+---
+
+# Appendix A — Mock provider contracts (spec)
+
+Implementations are built in later phases by another agent; this is the
+contract they must satisfy. References: DEC-002, DEC-007, DEC-008, plan.md §9
+Phase 4.
+
+## A.1 `MockTrainDataProvider` (Phase 4)
+
+Implements `TrainDataProvider` (`src/services/train-data/TrainDataProvider.ts`).
+
+1. **Provenance:** returns `demo` provenance on every journey, segment and
+   station. `capabilities.provenanceKinds = ['demo']`. It MUST NOT emit
+   `scheduled`, `cached-stale` or `real-time` — a unit test asserts this for
+   every fixture.
+2. **Labelling:** `displayName` is clearly "Mock (demo data)"; anything the UI
+   shows from it carries a visible demo label (checklist §1).
+3. **Fixture data** lives in a separate fixtures module, not inline in the
+   provider. Fixtures include: a multi-transfer journey, a journey crossing
+   midnight (day offsets), a journey with `null` times (shown as "unknown"),
+   long Bulgarian station names (layout stress), Cyrillic + Latin + mixed
+   station names, an empty result, and a station without coordinates.
+   Fixture schedules must look obviously synthetic and are never presented as
+   real BDZ times.
+4. **Scenario switching** for deterministic tests (config or magic input, no
+   network): `success`, `empty`, `malformed` (payload violating the schema →
+   `'invalid_response'`), `timeout`, `upstream_error`, `offline`,
+   `rate_limited`. Each scenario's behaviour (including latency simulation)
+   is deterministic.
+5. **Contract semantics honoured:** empty results resolve with `[]`; unknown
+   station ids reject `'not_found'`; `AbortSignal` aborts promptly
+   (`'cancelled'`); timeout budgets produce `'timeout'`; no promise ever
+   rejects with anything but `ProviderError`.
+6. **Determinism:** no `Math.random()` in results; `fetchedAt` is injected
+   clock time so snapshot tests are stable.
+7. **Privacy:** fixtures contain no personal data (checklist §14).
+
+## A.2 `MockTicketingProvider` (Phase 4/5)
+
+Implements `TicketingProvider` (`src/services/ticketing/TicketingProvider.ts`).
+Reachable only in development builds with `ticketSales` flag OFF in release
+(DEC-004). All orders are in-memory (or local-only) and labelled demo.
+
+1. **State machine:** enforces `ORDER_STATE_TRANSITIONS` exactly; illegal
+   transitions reject `'conflict'`.
+2. **Scenarios:** happy path `draft → … → ticket_issued`; `payment_failed`;
+   `issuance_failed` (paid, no ticket — exercises the reconciliation story);
+   delayed payment confirmation (order stays `pending_payment` for N polls,
+   then settles — tests the "payment being confirming" UI); duplicate callback
+   (same event delivered twice → no state regression, one `paid` timestamp);
+   price change between `createOrder` and `confirmPrice` (returns
+   `priceChanged: true` with the new `pricing`, order stays/returns
+   `price_confirmed`).
+3. **Idempotency:** same `IdempotencyKey` → same order/outcome, no second
+   charge; tests assert call counts.
+4. **No payment data:** the mock cannot accept card fields — they do not exist
+   in the types. `initiatePayment` returns a local, clearly-labelled fake
+   checkout page (dev only) with the app's deep-link return/cancel URLs.
+5. **Errors:** all failures as `ProviderError`; ticketing calls never
+   auto-retried (`NO_AUTO_RETRY_POLICY`).
+6. **Provenance:** `demo` on every order/ticket.
+
+---
+
+# Appendix B — Zod boundary validation spec (to implement in Phase 4)
+
+Not coded yet: Zod is not installed in this phase (DEC-007/DEC-009). When it
+lands (verified baseline: `zod@4.6.x`, MIT — DEC-009):
+
+1. One schema module per boundary in `src/services/train-data/schemas/` and
+   `src/services/ticketing/schemas/`, mirroring the types in `src/types/` —
+   `StationSchema`, `StationDirectorySchema`, `JourneySchema`,
+   `JourneySearchResultSchema`, `OrderSchema`, `TicketSchema`,
+   `InformationProvenanceSchema` (discriminated union on `kind`).
+2. Every external payload (HTTP response, provider callback payload, cached
+   file read back from disk) is `parse`d **before** mapping into domain types.
+   On failure: reject `ProviderError{code:'invalid_response'}`, log the schema
+   path + safe payload summary (no PII), never crash the app.
+3. Unknown extra fields are tolerated (forward compatibility) but never passed
+   through to the UI; missing optional fields stay `null`/absent ("unknown" in
+   the UI).
+4. Local persistence records (`LocalStoreSnapshot`) are validated on read and
+   reset per-field with a visible notice on corruption — never crash on old
+   schema versions; migrations bump `schemaVersion`.
+5. Tests (Phase 4/5): malformed payload, wrong types, missing required fields,
+   unknown discriminant values, out-of-range numbers (e.g. `amountMinor` not an
+   integer → reject), and a fuzz/corpus of truncated JSON.
+
+---
+
+# Appendix C — Explicit unknowns (do not treat as facts)
+
+- BDZ API availability, terms, rate limits, attribution requirements,
+  authorization status: **UNVERIFIED** (DEC-002).
+- Licensed station dataset (source, licence, geometry): **UNVERIFIED** (DEC-012).
+- Map SDK choice: **OPEN** (DEC-012).
+- Whether the ticketing gate can ever pass and on what commercial terms:
+  **UNKNOWN — product/legal owner decision**.
+- Cloud provider, hosting region (EU residency required per checklist §6),
+  RPO/RTO, payment provider, identity provider: **UNDECIDED** (DEC-003).
+- EAS Build quotas/costs: **UNVERIFIED** (DEC-001).
+- Real traffic numbers for the load model: **ASSUMPTIONS only** — see
+  `docs/scale-and-load-test-plan.md`.
+
+---
+
+## DEC-013 — Phase 0 integration record (lead verification + reconciliation)
+
+- **Date:** 2026-10-22
+- **Status:** Noted
+
+**Context.** Wave 1 ran the `discovery-legal` and `architect` subagents in
+parallel on 2026-10-22. Per the lead's working rules ("you do not blindly trust
+subagent reports: you verify"), the lead re-ran the key verification commands
+before integrating.
+
+**Verification (lead, 2026-10-22, real output).**
+
+- `ls docs/ src/types/ src/services/` — all 17 claimed files present.
+- `tsc --noEmit --strict --skipLibCheck src/types/*.ts src/services/**/*.ts`
+  → **exit 0** (TypeScript 5.8.3). Note: spec files only; no project `tsconfig`
+  exists until the scaffold wave.
+- Repo-wide scan for secret/credential patterns in `docs/` and `src/` — none
+  (three benign prose matches only).
+- Scan for private/undocumented endpoint paths — none.
+- "Data-source status: mock-only" present in `docs/bdz-integration-review.md`
+  (line 3), `docs/legal-compliance-matrix.md` (line 4) and DEC-002 — consistent.
+
+**Reconciliation with DEC-002 (stricter rule wins; no conflict found).**
+`docs/bdz-integration-review.md` (discovery-legal, 2026-10-22) reports, verified
+from source unless noted: all six plan.md §17.1 URLs returned HTTP 200; **no
+official BDZ API, open-data feed, GTFS publication or developer programme was
+found publicly** (this is an assumption — search coverage is not exhaustive);
+the only published BDZ data-sharing arrangement found is a 2019 licensed
+agreement with Google Maps; `https://bileti.bdz.bg/terms` is a JavaScript shell
+whose terms text is **not** in the public HTML — its content remains unverified
+(plan.md's characterisation of those terms is a project note, not fact); a
+`pitay.government.bg` FOI record returned HTTP 403 to the reviewer's client.
+DEC-002 stands unchanged: **mock-only**, no live provider work until a source is
+approved in writing.
+
+**New risks recorded (from discovery-legal, verified by the lead as reported).**
+
+1. **Third-party community GTFS feeds exist** (Transitland `f-bdz~bg` →
+   `jbb.ghsq.de`, busmaps.com mirror). Provenance unverified; using them would
+   be unlicensed data reuse. **Prohibited** as a data source unless legal
+   clearance is obtained (rules 1–2). Do not "just wire up" an unofficial feed.
+2. BDZ's public carriage-conditions PDF (dated 02.05.2025) contains concrete
+   commercial rules (e.g. an online-cancellation window and an online-sales
+   cutoff). Useful at the TICKETING GATE, but **never hard-code policy copy**
+   (plan.md 17.3): show current approved provider terms at purchase time.
+3. BDZ's privacy page shows a DPO e-mail whose displayed text differs from its
+   `mailto:` target — verify before any correspondence.
+
+**Phase 0 acceptance criteria (plan.md §9) — status.**
+
+| Criterion | Status | Evidence |
+|-----------|--------|----------|
+| Data-source status explicit (approved live / mock-only / blocked) | ✅ mock-only | `docs/bdz-integration-review.md` line 3 |
+| Platform build approach documented for Android and iOS | ✅ | DEC-001 (iOS = EAS/macOS only; Docker never builds iOS) |
+| No invented API endpoints or credentials | ✅ | lead scans above; both docs label every claim verified/assumption |
+
+**Human decisions required (nothing here is decided by agents).**
+
+1. Name a human owner for every role in addbeforerelease.txt §17 (all UNASSIGNED).
+2. Approve/deny initiating contact with BDZ (which legal entity, and with what
+   request: data licence / API / branding).
+3. Retain Bulgarian/EU legal counsel to review every `NEEDS LAWYER` item.
+4. Decide the app's operating legal entity (needed for ToS, privacy notice,
+   store accounts).
+5. Decide whether to pursue an FOI/open-data reuse request for timetable data.
+6. Approve/deny the "Continue to official BDZ ticketing" link (product/legal).
+7. Set launch-date gates and confirm ticketing stays feature-flagged OFF.
