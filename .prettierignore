@@ -6,3 +6,12 @@ android/
 ios/
 package-lock.json
 *.md
+
+# Phase 0 spec files are protected byte-identical (owner constraint of the
+# scaffold wave). They are excluded from Prettier so `npm run format` can never
+# rewrite them. If a later wave may change them, drop the exclusions and
+# re-format deliberately.
+src/types/
+src/services/common/RequestOptions.ts
+src/services/train-data/TrainDataProvider.ts
+src/services/ticketing/TicketingProvider.ts

@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       run_native_build_placeholders:
-        description: "Run the native build PLACEHOLDER jobs (not configured, expected to fail until a human sets up signing)"
+        description: 'Run the native build PLACEHOLDER jobs (not configured, expected to fail until a human sets up signing)'
         type: boolean
         default: false
 
@@ -71,7 +71,7 @@ jobs:
         run: npm run audit:deps
 
   android-build-placeholder:
-    name: "Android build (PLACEHOLDER — never run)"
+    name: 'Android build (PLACEHOLDER — never run)'
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && inputs.run_native_build_placeholders == true
     steps:
@@ -98,7 +98,7 @@ jobs:
           exit 1
 
   ios-build-placeholder:
-    name: "iOS build (PLACEHOLDER — macOS runner, never run)"
+    name: 'iOS build (PLACEHOLDER — macOS runner, never run)'
     runs-on: macos-latest
     if: github.event_name == 'workflow_dispatch' && inputs.run_native_build_placeholders == true
     steps:
