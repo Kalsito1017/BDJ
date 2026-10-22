@@ -15,7 +15,7 @@ screen only. No features are implemented yet.
 | In-app ticket sales | **Disabled** (feature flag `ticketSales` OFF, mock provider only) until written BDZ authorization and a supported integration exist (DEC-004, plan.md 17.1). |
 | Payment card data | Never collected, stored or logged — by design; provider-hosted checkout only (plan.md 17.3). |
 | Capacity ("1,000,000 concurrent users") | **No such claim.** Load test not run (DEC-011, `docs/scale-and-load-test-plan.md`). |
-| CI | Workflow exists (`.github/workflows/ci.yml`) but has **never been executed** — no run has happened at the time of writing. |
+| CI | Workflow exists (`.github/workflows/ci.yml`) and the repo was pushed to GitHub on 2026-10-22, so a run **may** have been triggered. **No agent has observed any CI run or its output — treat CI status as UNVERIFIED** and check the repository's Actions tab. |
 | iOS / Android builds | **NOT RUN** in this environment (Linux). See [Building](#building). |
 | Store submission | Not started. |
 
@@ -204,8 +204,10 @@ scripts/        repo tooling scripts (none yet)
 3. Android and iOS build **placeholder** jobs — disabled, never run, exit
    non-by design until a human configures a real build path + signing secrets.
 
-No CI run has been executed yet. All credentials belong in GitHub Actions
-secret storage; none are needed for the quality job.
+CI status is **UNVERIFIED**: the repository was pushed to GitHub on 2026-10-22,
+which may have triggered runs, but no agent has seen any run or its output.
+Check the Actions tab before trusting CI. All credentials belong in GitHub
+Actions secret storage; none are needed for the quality job.
 
 ## Security and compliance notes
 

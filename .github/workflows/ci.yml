@@ -1,9 +1,9 @@
 # CI for the BDZ train companion app (plan.md §13).
 #
-# STATUS NOTE (2026-10-22): this workflow has NEVER been executed — it was
-# authored on a local machine and pushed as configuration only. Do not read
-# this file as evidence that CI passed. The first real run must be reviewed by
-# a human.
+# STATUS NOTE (2026-10-22): no agent has observed a CI run or its output. The
+# repository was pushed to GitHub on 2026-10-22, which may have triggered runs,
+# but their status is UNVERIFIED. Do not read this file as evidence that CI
+# passed. The first real run must be reviewed by a human.
 #
 # Secrets: none are used by the quality jobs. Any future signing credentials
 # (EAS tokens, keystores, provisioning profiles) belong in GitHub Actions
