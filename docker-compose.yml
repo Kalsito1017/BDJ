@@ -1,0 +1,38 @@
+# Docker Compose — local development tooling only.
+#
+# Runs the Expo/Metro dev server in a container and publishes it on the host
+# at http://localhost:8081 (Metro status: /status). It does NOT run iOS
+# anything (impossible on Linux) and does NOT run an Android emulator.
+#
+# Usage:
+#   docker compose up --build
+#   curl http://localhost:8081/status
+services:
+  mobile:
+    build:
+      context: .
+    working_dir: /app
+    ports:
+      - "8081:8081"
+    volumes:
+      - .:/app
+      - mobile_node_modules:/app/node_modules
+    environment:
+      # Keep CI=false: Expo disables file watching/Fast Refresh when CI=1.
+      - CI=false
+    command: npm start -- --port 8081
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:8081/status').then(r=>r.text()).then(t=>process.exit(t.includes('packager-status')?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  mobile_node_modules:

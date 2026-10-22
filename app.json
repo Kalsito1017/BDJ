@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "BDZ Train Companion",
+    "slug": "bdz-train-companion",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "bdztrain",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.example.bdztrain"
+    },
+    "android": {
+      "package": "com.example.bdztrain"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "root": "src/app"
+        }
+      ],
+      "expo-status-bar"
+    ]
+  }
+}

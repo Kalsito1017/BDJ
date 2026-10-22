@@ -1,0 +1,124 @@
+# CI for the BDZ train companion app (plan.md §13).
+#
+# STATUS NOTE (2026-10-22): this workflow has NEVER been executed — it was
+# authored on a local machine and pushed as configuration only. Do not read
+# this file as evidence that CI passed. The first real run must be reviewed by
+# a human.
+#
+# Secrets: none are used by the quality jobs. Any future signing credentials
+# (EAS tokens, keystores, provisioning profiles) belong in GitHub Actions
+# secret storage only — never in the repository (addbeforerelease.txt §5/§15).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_native_build_placeholders:
+        description: "Run the native build PLACEHOLDER jobs (not configured, expected to fail until a human sets up signing)"
+        type: boolean
+        default: false
+
+jobs:
+  quality:
+    name: install, typecheck, lint, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Clean install from lockfile
+        run: npm ci
+
+      - name: TypeScript (strict)
+        run: npm run typecheck
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Jest tests
+        run: npm run test:ci
+
+  dependency-audit:
+    name: dependency audit (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    # continue-on-error is TEMPORARY and must stay visible: on 2026-10-22 the
+    # tree reports 30 high advisories inherited from upstream Expo / React
+    # Native / Jest tooling chains (braces, node-forge, sprintf-js advisories;
+    # no non-breaking fix available). The security owner (addbeforerelease.txt
+    # §17) decides when this job becomes required. Do not silently delete it.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Clean install from lockfile
+        run: npm ci
+
+      - name: npm audit (fails on high/critical)
+        run: npm run audit:deps
+
+  android-build-placeholder:
+    name: "Android build (PLACEHOLDER — never run)"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.run_native_build_placeholders == true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # PLACEHOLDER ONLY — NOT CONFIGURED, NOT VERIFIED. This job has never
+      # run. Building Android artifacts requires either
+      #   (a) EAS Build (`eas build -p android --profile preview`) with an
+      #       EAS token in secret storage, or
+      #   (b) a runner with JDK 17 + Android SDK + accepted licences and
+      #       `npx expo prebuild -p android && cd android && ./gradlew assembleRelease`
+      # plus signing configuration (keystore in CI secret storage).
+      # Choose and document one path in README.md and docs/decisions.md before
+      # removing this comment.
+      - name: Not configured
+        run: |
+          echo "Android build placeholder: no build path is configured yet."
+          echo "See README.md 'Building' — this step exits non-zero on purpose."
+          exit 1
+
+  ios-build-placeholder:
+    name: "iOS build (PLACEHOLDER — macOS runner, never run)"
+    runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.run_native_build_placeholders == true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # PLACEHOLDER ONLY — NOT CONFIGURED, NOT VERIFIED. This job has never
+      # run. iOS artifacts require macOS + Xcode (never Linux/Docker — plan.md
+      # §2). Typical paths:
+      #   (a) EAS Build (`eas build -p ios --profile preview`) with an EAS
+      #       token in secret storage, or
+      #   (b) this macOS runner with Xcode: `npx expo prebuild -p ios` then
+      #       `xcodebuild ... -archivePath ... archive` with certificates and
+      #       provisioning profiles from CI secret storage.
+      - name: Not configured
+        run: |
+          echo "iOS build placeholder: no build path is configured yet."
+          echo "See README.md 'Building' — this step exits non-zero on purpose."
+          exit 1
