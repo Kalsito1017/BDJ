@@ -57,8 +57,10 @@ export interface TrainDataProvider {
 
   /**
    * Search journeys between two stations on a travel date.
-   * Resolves with an empty array (never throws) when the source has no
-   * journeys; rejects only on transport/validation failures.
+   * Resolves with a `JourneySearchResult` whose `journeys` array is empty
+   * (never throws) when the source has no journeys; rejects only on
+   * transport/validation failures. (plan.md §4's `Promise<Journey[]>` sketch
+   * is extended by the envelope — DEC-006/DEC-007.)
    */
   searchJourneys(input: JourneySearch, options?: RequestOptions): Promise<JourneySearchResult>;
 

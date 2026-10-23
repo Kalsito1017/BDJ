@@ -12,7 +12,7 @@
  * "clear saved items" (with confirmation — plan.md section 8).
  */
 
-import type { EntityId, ISODate, ISODateTime } from './common';
+import type { EntityId, ISODateTime } from './common';
 import type { JourneySearch } from './journey';
 
 /** A saved station (plan.md section 3.5). */

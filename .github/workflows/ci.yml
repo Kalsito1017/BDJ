@@ -11,6 +11,11 @@
 
 name: CI
 
+# Least privilege (security review F-03): the quality jobs only need to read
+# the repository — no write access, no secrets.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]

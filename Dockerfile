@@ -23,6 +23,11 @@ RUN npm ci
 
 COPY . .
 
+# Least privilege (security review F-06): run tooling as the base image's
+# unprivileged `node` user; only the app tree's ownership changes.
+RUN chown -R node:node /app
+USER node
+
 EXPOSE 8081
 
 # --host lan is the default and binds the dev server on all interfaces so the

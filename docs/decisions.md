@@ -24,6 +24,7 @@ Entries follow: **ID — Title**; *Date*; *Status*; Context; Decision; Consequen
 | DEC-011 | Capacity-claims policy ("1,000,000 concurrent users") | Accepted |
 | DEC-012 | Map SDK selection | Open |
 | DEC-013 | Phase 0 integration record (lead verification + reconciliation) | Noted |
+| DEC-014 | Phase 1 integration record: independent review findings and disposition | Noted |
 
 ---
 
@@ -599,7 +600,9 @@ Implements `TrainDataProvider` (`src/services/train-data/TrainDataProvider.ts`).
    `'invalid_response'`), `timeout`, `upstream_error`, `offline`,
    `rate_limited`. Each scenario's behaviour (including latency simulation)
    is deterministic.
-5. **Contract semantics honoured:** empty results resolve with `[]`; unknown
+5. **Contract semantics honoured:** empty results resolve with an empty
+   `JourneySearchResult` (`journeys: []`) — plan.md §4's `Promise<Journey[]>`
+   sketch is extended by the envelope (DEC-006/007); unknown
    station ids reject `'not_found'`; `AbortSignal` aborts promptly
    (`'cancelled'`); timeout budgets produce `'timeout'`; no promise ever
    rejects with anything but `ProviderError`.
@@ -743,3 +746,63 @@ approved in writing.
 5. Decide whether to pursue an FOI/open-data reuse request for timetable data.
 6. Approve/deny the "Continue to official BDZ ticketing" link (product/legal).
 7. Set launch-date gates and confirm ticketing stays feature-flagged OFF.
+
+---
+
+## DEC-014 — Phase 1 integration record: independent review findings and disposition
+
+- **Date:** 2026-10-22
+- **Status:** Noted
+
+**Context.** Phase 1 (scaffold + quality gates, agent `devops-build`) was
+integrated and then reviewed independently by `reviewer-qa` and
+`security-privacy` (neither authored the code). This entry records the
+findings and their disposition. Full evidence:
+`docs/security-privacy-review-2026-10-22.md`, `docs/threat-model.md`, and the
+reviewer report (31 tests in `tests/`).
+
+**Review verdicts (2026-10-22).**
+
+- `reviewer-qa`: **PASS with findings** — 0 critical, 0 high, 3 medium, 6 low.
+- `security-privacy`: **no secrets anywhere** (working tree + all commits + git
+  config scanned; nothing to rotate), 0 critical/high, 2 medium, 4 low.
+
+**Fixed by the lead after review (gates re-run afterwards, real output).**
+
+| Finding | Fix | Verification |
+|---------|-----|--------------|
+| M1 stale `searchJourneys` doc comment + Appendix A.5 "resolves with `[]`" | corrected to the `JourneySearchResult` envelope semantics | `npm run typecheck` PASS |
+| L1 unused `ISODate` import (`src/types/favourites.ts`) | removed | `npm run lint` PASS — now **0 problems** |
+| L3 README typo | "non-zero by design" | text |
+| F-01 Metro published on all host interfaces (`docker-compose.yml`) | bound to `127.0.0.1:8081` with LAN opt-in comment | `docker compose config` VALID |
+| F-03 no workflow permissions (`.github/workflows/ci.yml`) | `permissions: contents: read` | file |
+| F-04 signing artifacts not ignored | `.gitignore`/`.dockerignore` extended (`*.p8`, `*.pfx`, `*.der`, `*.key`, `*.cer`, `*.certSigningRequest`, `*.p10`, `keystore.properties`, `service-account*.json`, `.envrc`) | file |
+| F-06 container runs as root (`Dockerfile`) | `USER node` after `chown -R node:node /app` | NOT built — see blockers |
+
+Gates after fixes (lead-run, 2026-10-22): `npm run typecheck` PASS,
+`npm run lint` PASS (0 problems), `npm test` **31/31 PASS** (5 suites),
+`docker compose config` VALID.
+
+**Deferred — owned by named humans or later phases.**
+
+| Finding | Disposition |
+|---------|-------------|
+| M2 placeholder screen has 2 hard-coded English strings | **Phase 2** (i18n-a11y/mobile-ui): move to `src/i18n/locales/{bg,en}.json`; the claim-lexicon regression test must cover every new screen |
+| M3/F-02 `npm audit`: 48 findings (30 high) from 3 transitive advisories (`braces`, `node-forge`, `sprintf-js`) — GitHub advisories show **"Patched versions: None"** on all three (verified 2026-10-22) | CI `dependency-audit` stays **advisory** until the security owner decides. **Never run `npm audit fix --force`** (breaks the SDK 58 line). Recommended: an audit-diff baseline gate that fails only on *new* advisories. Decision owner: security/compliance role (UNASSIGNED) |
+| L2 commit `0fa57e2` ("Update project") converted `addbeforerelease.txt` to CRLF (content byte-identical, verified with `git diff --ignore-cr-at-eol`) | Noted: input docs should not be churned; no content change occurred |
+| L4/L5 doc-only type aliases; `Journey.segments`/`legs` not `readonly` | Cosmetic; fix in the Phase 4 touch of those files |
+| L6/F-05 placeholder bundle IDs `com.example.bdztrain` | **Phase 8**: replace with company-owned IDs (checklist §1) and log the decision |
+
+**Phase 1 status (honest).** Quality gates: **verified** (output above).
+Docker image build + in-container `npm ci`: **BLOCKED** — the Docker daemon is
+not running on this host and starting it requires interactive authentication
+(human action: `sudo systemctl start docker`, then `docker compose up --build`).
+GitHub Actions runs: **UNVERIFIED** — nobody has seen run output; the repo was
+pushed to GitHub mid-session. iOS/Android builds and device tests: **NOT RUN**
+(Linux host; iOS = macOS/Xcode or EAS only, rule 8).
+
+**Human decisions added.** (8) Start the Docker daemon so the container path
+can be verified, or accept it as documented-not-verified for now. (9) Decide
+whether the two local commits ahead of `origin/main` are pushed, and who
+maintains the GitHub repo going forward. (10) Security owner to decide on the
+dependency-audit gate (M3/F-02).

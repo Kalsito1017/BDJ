@@ -21,6 +21,16 @@ ios/
 *.jks
 *.keystore
 *.p12
+*.p8
+*.pfx
+*.der
+*.key
+*.cer
+*.certSigningRequest
+*.p10
+keystore.properties
+service-account*.json
+.envrc
 *.pem
 *.mobileprovision
 *.provisionprofile

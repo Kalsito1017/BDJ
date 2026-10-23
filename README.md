@@ -202,7 +202,7 @@ scripts/        repo tooling scripts (none yet)
 1. `npm ci`, `npm run typecheck`, `npm run lint`, `npm run test:ci` (required)
 2. `npm run audit:deps` (advisory, see above)
 3. Android and iOS build **placeholder** jobs — disabled, never run, exit
-   non-by design until a human configures a real build path + signing secrets.
+   non-zero by design until a human configures a real build path + signing secrets.
 
 CI status is **UNVERIFIED**: the repository was pushed to GitHub on 2026-10-22,
 which may have triggered runs, but no agent has seen any run or its output.
