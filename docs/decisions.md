@@ -31,6 +31,9 @@ Entries follow: **ID — Title**; *Date*; *Status*; Context; Decision; Consequen
 | DEC-018 | Wave 3 integration record (i18n reconciliation + Map tab wiring) | Noted |
 | DEC-019 | Wave 5 review record: findings disposition, i18n vocabulary rule, audit re-baseline | Noted |
 | DEC-020 | Docker verification record (Phase 1 criterion closed) | Noted |
+| DEC-021 | Phase 3/4 data access layer: TanStack Query hooks over TrainDataProvider | Accepted |
+| DEC-022 | Phase 3 journey flow UI: routes, validation rules, key merge, resolver choice | Accepted |
+| DEC-023 | Phase 3 review record: findings disposition and guard hardening | Noted |
 
 ---
 
@@ -1068,3 +1071,120 @@ Per the checklist these flaky tests were treated as defects: bounded
 path ✅ (as documentation; **NOT RUN** — Linux host, rule 8) · CI ⚠️
 **UNVERIFIED** (workflow exists; no agent has seen a run). Android native build
 remains **NOT RUN** (no SDK here).
+
+---
+
+## DEC-021 — Phase 3/4 data access layer: TanStack Query hooks over TrainDataProvider
+
+- **Date:** 2026-10-24
+- **Status:** Accepted
+
+**Context.** plan.md §9 Phase 3/4; DEC-002/006/007/017; checklist §7 (offline
+caching with expiry and stale labels).
+
+**Decision.** `src/hooks/` exposes `AppDataProvider` (QueryClient + provider
+context; defaults to `MockTrainDataProvider` + `createAppQueryClient()`),
+`useStationSearch` (250 ms debounce on changes; empty query = full directory),
+`useJourneySearch` (enabled only with complete from/to/date; empty result =
+empty envelope), `useJourney`. Query keys are centralised in `queryKeys.ts` and
+include all inputs. Cache policy: staleTime 60 s / gcTime 5 min (stations
+5 min / 30 min — static data), documented in `AppDataProvider.tsx`.
+
+**Single retry layer:** React Query `retry: false`; bounded retries with jitter
+stay in the DEC-007 executor only. Every provider call runs through
+`runProviderCall` so failures surface exclusively as typed `ProviderError`;
+TanStack's per-fetch `AbortSignal` is passed to `RequestOptions.signal`, so
+unmounts cancel in-flight work (tested). `dataUpdatedAt`/`isFetching` drive
+freshness copy ("Results loaded at {time}"), but query staleness **never**
+produces `cached-stale` provenance (rule 6) unless payload data carries the
+DEC-006 fields.
+
+**Consequences.** (+) Screens depend on hooks only; swapping the mock for an
+authorised provider touches `services/` (DEC-002). (−) React Query's
+`onlineManager` is not wired to real network status yet (Phase 5 — related to
+the known `stations.offline.banner` gap). DEC-019 items W3-M1/L1/L2/L3 remain
+open for the next data-provider wave.
+
+---
+
+## DEC-022 — Phase 3 journey flow UI: routes, validation rules, key merge, resolver choice
+
+- **Date:** 2026-10-24
+- **Status:** Accepted
+
+**Decision.**
+
+1. **Routes (deep-link contract, extends DEC-005):** `/search` (form, in tabs),
+   `/search/results?from=<stationId>&to=<stationId>&date=YYYY-MM-DD`,
+   `/search/station-picker?field=from|to` (modal), `/journey/[id]`. Renaming
+   needs a new entry. Route params are opaque ids + ISO date; malformed params
+   render an actionable error state (tested).
+2. **Form validation (Zod + react-hook-form):** both stations required;
+   from ≠ to (cross-field, error on `toStation`); date required, `YYYY-MM-DD`,
+   valid calendar date, not past (Europe/Sofia "today"), ≤90 days ahead
+   (`validation.date_too_far`). Typed values are retained when one field fails
+   (checklist §7).
+3. **Dependency note (DEC-009 amendment):** `@hookform/resolvers@6.0.0` was
+   **rejected** — it declares `peerOptional effect@^4` while its own
+   `@typeschema` chain pins `effect@3.x` (ERESOLVE; not forced with
+   `--legacy-peer-deps`). Installed `@hookform/resolvers@5.9.2` (MIT, peer
+   `react-hook-form ^7.55`, standard-schema), verified working with
+   `zod@4.6.7` by an executed test before implementation. Also installed this
+   wave: `react-hook-form@7.91.0`, `@tanstack/react-query@5.104.5` (both MIT,
+   registry-verified 2026-10-24).
+4. **i18n (DEC-016 §3 single-owner):** 39 journey-flow keys merged into both
+   catalogs by the lead (240 keys per locale; all parity/length/Cyrillic/claim
+   guards green). Freshness copy = `journey_results.fetched_at`; the unused
+   `journeys.updated_at_label`/`journeys.stale_hint` proposals were **not**
+   added (no dead keys — DEC-019 M1). The station picker reuses the reserved
+   `stations.*` set (DEC-019) instead of re-inventing keys.
+5. **Vocabulary consolidation still owed (DEC-019 M1):** duplicate concepts
+   remain between the stations feature contract and the reserved set
+   (`stations.empty` vs `stations.list.empty.title`, etc.) — one consolidation
+   pass, lead-reviewed, before the map wave.
+
+**Consequences.** (+) Search → results → details works end-to-end on the mock
+provider without sign-in, demo-labelled throughout (rule 6). (−) Station names
+on results/details resolve via the station directory lookup; if a future
+provider returns names on segments, drop the lookup.
+
+---
+
+## DEC-023 — Phase 3 review record: findings disposition and guard hardening
+
+- **Date:** 2026-10-24
+- **Status:** Noted
+
+**Context.** Wave 5 review of the Phase 3 change (the first reviewer attempt
+was aborted by a server restart and re-run). Verdicts: `reviewer-qa`
+**FAIL → fixed** (2 high, 3 medium, 8 low); `security-privacy` **no
+critical/high, no secrets** (2 medium, 2 low, 5 info —
+`docs/security-privacy-review-2026-10-24b.md`, threat model updated). Both
+verified the "588/588 in 46 suites" claim exactly.
+
+**Fixed by the lead (2026-10-24).**
+
+| Finding | Fix | Verification |
+|---------|-----|--------------|
+| H1 missing `journey_results.empty_title` in both catalogs (raw key on the empty state). **Root cause:** one key was lost during the reviewers' own catalog spot-check restore cycle (their report's before/after md5s differed). Note: the DEC-022 §4 merge itself was correct — 39 keys, 240/locale — the loss happened afterwards. | key restored to both locales (240 keys each) | reviewer's `journey-flow-key-contract.test.ts` goes green |
+| H2 guards could not catch H1: a key deleted from BOTH catalogs silently re-entered the derived "pending" set; `key-usage` REGISTRY_FILES omitted the journey contract files | `key-usage` now scans all 4 journey `translationKeys.ts` registries; `i18n-integrity` now **fails** when any contract key is unmerged (pending set must be empty) | spot-check rule restored: removing a key fails the suite |
+| M1/M2 "retry" that did not retry (picker: none at all; details + broken-params: `router.back()` behind a "Retry" label) | `refetch` added to `useStationSearch`/`useJourney` contracts; picker `onRetry` wired; details retry now re-fetches; broken-params state shows **no** retry button (nothing to retry) | gate run |
+| M3 dead key `journey.card_a11y` + unused `JourneyCard.index` (a11y claim in contract not implemented) | card now sets `accessibilityLabel` with the 1-based index | gate run |
+| L1 deep links bypassed form rules (past/far dates, from===to accepted) | `journeySearchFromRouteParams` (single implementation, injectable clock) applies the form rules at the route boundary | gate run |
+| L2/L3 stale "pending a DEC entry" route comments; date field not marked required | comments cite DEC-022 §1; `required` set on the date input | gate run |
+
+**Deferred (owner → item).** data-provider: W3B-M1 length/charset bounds on
+`from`/`to`/`id` at the provider boundary (routes now validated; schema
+`.max()` bounds = DEC-019 W3-M1 batch), W3B-L2 static `notFound` messages, L4
+`fetchAllStations` 25-row fallback contract trap. i18n/human: L6 bg copy nit
+(`journey_results.fetched_at` — „Резултатите са заредени в {time}" may prefer
+„… {time} ч") needs human confirmation alongside the outstanding translation
+review. Test hygiene: L7 deprecated RNTL `findBy*(text, {timeout})` form; L8
+package.json caret ranges vs DEC-022 §3 exact pins (lockfile pins are exact
+today). Map wave: W3B-L1 maxLength on the stations screen input.
+
+**Phase 3 acceptance criteria (plan.md §9) — status.** Station picker + search
+form ✅ · validation incl. typed-value retention ✅ · unit tests for form
+validation and station filtering (through the real hook + mock provider) ✅ ·
+Cyrillic station search ✅ · typed domain models throughout ✅ · every screen
+has loading/empty/error/timeout/offline + **working** retry ✅.

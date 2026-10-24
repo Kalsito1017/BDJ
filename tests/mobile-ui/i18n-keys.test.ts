@@ -2,20 +2,13 @@
  * i18n key-contract test for the strings THIS workstream (mobile-ui) renders.
  *
  * Every key the design system, onboarding and route screens use must exist
- * in BOTH locale catalogs (plan.md 17.6, checklist §8). Keys still pending
- * reconciliation with the i18n workstream are listed explicitly in
- * `PENDING_KEYS` — the test fails if any OTHER key is missing, and warns as
- * long as a pending key is still absent.
+ * in BOTH locale catalogs (plan.md 17.6, checklist §8). The Phase 2
+ * `PENDING_KEYS` list was removed once those keys landed (DEC-019 L1);
+ * cross-agent key gaps are tracked DERIVED from the feature contract files
+ * in tests/mobile-ui/i18n-integrity.test.tsx instead — a hand-maintained
+ * pending list can only go stale.
  */
 import { catalogs, translate, type Locale } from '../../src/i18n';
-
-/** Keys requested from the i18n workstream (mobile-ui report, Phase 2). */
-const PENDING_KEYS: readonly string[] = [
-  'scaffold.placeholder_body',
-  'scaffold.coming_soon',
-  'scaffold.states_preview',
-  'tickets.unavailable_notice',
-];
 
 /** Every key consumed by src/components, src/features/onboarding, src/app. */
 const REQUIRED_KEYS: readonly string[] = [
@@ -87,7 +80,10 @@ const REQUIRED_KEYS: readonly string[] = [
   'provenance.cached_stale_desc',
   'provenance.real_time',
   'provenance.real_time_desc',
-  ...PENDING_KEYS,
+  'scaffold.placeholder_body',
+  'scaffold.coming_soon',
+  'scaffold.states_preview',
+  'tickets.unavailable_notice',
 ];
 
 const LOCALES: readonly Locale[] = ['bg', 'en'];
@@ -97,21 +93,8 @@ describe('i18n keys used by mobile-ui', () => {
     const missing = REQUIRED_KEYS.filter((key) => {
       const value = catalogs[locale][key];
       return typeof value !== 'string' || value.trim().length === 0;
-    });
-    const unexpected = missing.filter((key) => !PENDING_KEYS.includes(key));
-    const pending = missing.filter((key) => PENDING_KEYS.includes(key));
-
-    if (pending.length > 0) {
-      // Known cross-agent gap: requested from the i18n workstream; the lead
-      // reconciles. Surfaces in the test output until it lands.
-      console.warn(
-        `PENDING i18n keys still missing in "${locale}": ${pending.join(', ')}`,
-      );
-    }
-    expect({ locale, unexpectedMissing: unexpected }).toEqual({
-      locale,
-      unexpectedMissing: [],
-    });
+    }).map((key) => `${locale}.${key}`);
+    expect(missing).toEqual([]);
   });
 
   it('interpolates the page indicator params', () => {

@@ -3,6 +3,8 @@
 **Created:** 2026-10-22 (security-privacy specialist subagent, Phase 0 + Phase 1 review).
 **Updated:** 2026-10-24 (same subagent — Wave 3 review: theme/components/app shell,
 onboarding, stations + nearby, i18n, mock data layer, settings storage).
+**Updated:** 2026-10-24b (same subagent — Phase 3 review: journey search/results/details,
+station picker, data-access hooks, deep-link params now READ — see EP-1/EP-2/EP-3/EP-5).
 **Status:** DRAFT for human review. No human security owner has reviewed this document
 (addbeforerelease.txt §17: "Security / compliance owner" — UNASSIGNED).
 **Required by:** addbeforerelease.txt §5 ("Threat model written before launch");
@@ -16,7 +18,13 @@ analytics code in the tree), **zero network calls** (re-verified 2026-10-24: no
 `src/` or `tests/` — the only `http` occurrence is a doc-comment URL in `src/test/setup.ts`).
 The UI now has a real tab shell (`src/app/(tabs)/`), first-launch onboarding, a stations
 feature (search over a bundled synthetic demo dataset + nearby-stations flow shell), and
-i18n (bg/en) — see the 2026-10-24 updates in EP-1/EP-2/EP-3/EP-6 and §5. Everything marked
+i18n (bg/en) — see the 2026-10-24 updates in EP-1/EP-2/EP-3/EP-6 and §5. Since Phase 3
+(2026-10-24b) there is a full journey flow over the same mock data: Zod+react-hook-form
+search, results and details screens, a station-picker modal, and a TanStack Query data
+layer (`src/hooks/`) — **and three routes now read deep-link parameters** (`/search/results`,
+`/search/station-picker`, `/journey/[id]`), so EP-3 is no longer "parameter-free" (re-verified
+2026-10-24b: still zero network calls, zero `console.*`, nothing persisted beyond the two
+settings keys). Everything marked
 *(future)* below is a design target for a system that does not exist yet; it is modelled
 now so the seams built today (provider interfaces, feature flags) can be checked against it.
 
@@ -28,7 +36,7 @@ This is an engineering document, not legal advice and not a penetration-test sub
 
 | ID | Asset | Where it lives today | Sensitivity |
 |----|-------|----------------------|-------------|
-| A1 | **User travel intent** — recent searches, favourite routes/stations (origin→destination pairs reveal where a person goes) | Planned on-device AsyncStorage (`src/types/favourites.ts`) | Personal data (GDPR); on-device only |
+| A1 | **User travel intent** — recent searches, favourite routes/stations (origin→destination pairs reveal where a person goes) | Planned on-device AsyncStorage (`src/types/favourites.ts`). **Since Phase 3, travel intent also exists in MEMORY only:** the TanStack Query cache (search inputs + results, `src/hooks/AppDataProvider.tsx`, gc ≤ 30 min) and the single-slot pending-selection store (`src/features/station-picker/selection.ts:27`) | Personal data (GDPR); on-device only; memory copies die with the process |
 | A1b | **Local settings** — language choice + onboarding-completed flag | AsyncStorage via `src/services/storage/settingsStorage.ts` (exactly two keys: `settings.language`, `settings.onboardingCompleted` — verified 2026-10-24) | Non-personal / low sensitivity; no identifiers, no timestamps |
 | A2 | **User location** (foreground, only for the "nearby stations" feature) | Not collected today: the nearby flow exists (`src/features/stations/model/nearby.ts`) but **no location module is installed** (`expo-location` is not a dependency) and the default `LocationPort` reports `unavailable` (`src/features/stations/StationsScreen.tsx:40-47`) | Sensitive personal data; minimisation rules in plan.md 17.5 |
 | A3 | **Information provenance labels** — the guarantee that demo/scheduled/cached-stale/real-time are never conflated | `src/types/provenance.ts`, feature flags | Integrity/trust asset: the app's honesty is a product feature (rule 6) |
@@ -80,19 +88,26 @@ STRIDE = Spoofing, Tampering, Repudiation, Information disclosure, Denial of ser
 Elevation of privilege. "Mitigation today" is verified in this repository; "Required action"
 is work for the phase named.
 
-### EP-1 — Text search input (station search live since Wave 3; journey search *Phase 3*)
+### EP-1 — Text search input (station search live since Wave 3; journey search LIVE since Phase 3)
 
 Station search is implemented (`src/features/stations/model/stationSearch.ts` + `normalize.ts`,
 UI in `StationsView.tsx`): normalisation is pure string operations (NFD, diacritic strip,
 deterministic Cyrillic→Latin transliteration); **no `RegExp` is ever built from user input**
-(no ReDoS surface), no I/O, no logging. Journey search (date/time/limit) remains future.
+(no ReDoS surface), no I/O, no logging. **Journey search is live since Phase 3
+(2026-10-24b):** the form (`src/features/journey-search/`) validates with a Zod schema
+(`validation.ts` — required stations, from ≠ to, strict `YYYY-MM-DD` calendar date, not
+past, ≤ 90 days ahead, Europe/Sofia); date input is `maxLength={10}`
+(`JourneySearchForm.tsx:232`); the station-picker query is bounded at 128 chars
+(`StationPickerView.tsx:35,124` — closes review W3-L5 for THAT input only; the stations
+screen input at `StationsView.tsx:76` remains unbounded, review W3B-L1). Error messages
+are i18n keys, never raw input (W3B review §3).
 
 | STRIDE | Threat | Mitigation today | Required action |
 |--------|--------|------------------|-----------------|
 | S | Attacker-supplied station names/times rendered as if provider-authoritative | Provenance on every record (`src/types/provenance.ts`); UI must render labels (DEC-006) | Phase 3/4 tests: provenance label always visible; `demo`-only mock enforced by test (DEC-002) |
-| T | Malformed/oversized input reaches a future provider or breaks validation | Types define bounded fields (`src/types/journey.ts:27-40`); Zod boundary specified (DEC-007 App. B) and **implemented** for provider payloads (`src/services/api/parsePayload.ts`); search query is length-unbounded but processed as plain substrings | Implement Zod + length/format limits at the boundary in Phase 4; never trust form state alone; consider `maxLength` on the search `TextInput` when a large licensed directory replaces the 20-station demo set (review W3-L6) |
+| T | Malformed/oversized input reaches a future provider or breaks validation | Types define bounded fields (`src/types/journey.ts:27-40`); Zod boundary specified (DEC-007 App. B) and **implemented** for provider payloads (`src/services/api/parsePayload.ts`); **Phase 3:** the journey form is Zod-validated (see above) and the picker query is length-bounded (128) | Implement Zod + length/format limits at the boundary in Phase 4; never trust form state alone; **bound the stations-screen search input too** (W3B-L1/W3-L5) and length-bound deep-link ids (W3B-M1, EP-3) |
 | R | Search requests are not user-actionable denials ("something went wrong") | `ProviderError.code` → localised message contract (`src/types/errors.ts:76-78`); `ErrorState` renders only `ERROR_MESSAGE_KEYS[code]`, never raw error text (`src/components/ErrorState.tsx`) | Phase 4 UI mapping test for every code |
-| I | Search terms (travel intent) leak into logs/crash reports | No logging exists anywhere in `src/` (verified again 2026-10-24: zero `console.*` calls) | Ban logging of `JourneySearch`, station text and `GeoPoint` in the logging policy when logging is added (checklist §14 "privacy test") |
+| I | Search terms (travel intent) leak into logs/crash reports | No logging exists anywhere in `src/` (verified again 2026-10-24b, incl. the Phase 3 code: zero `console.*` calls) | Ban logging of `JourneySearch`, station text and `GeoPoint` in the logging policy when logging is added (checklist §14 "privacy test") |
 | D | Huge result sets / repeated searches exhaust device or future API | `limit` on search (`src/types/journey.ts:39`); retry policy bounded, jittered (`src/services/common/RequestOptions.ts:46-52`) | Future API needs rate limits (checklist §5/§11) |
 | E | A search response drives navigation/action without validation | — | Zod parse before mapping; unknown fields never passed to UI (DEC-007 App. B.3) — **implemented** (`parseExternalPayload`, schemas strip unknown fields) |
 
@@ -104,8 +119,12 @@ coordinates are invented. It contains no personal data (review W3-§5). Abuse ca
 
 **Live since Wave 3:** exactly two keys via `src/services/storage/settingsStorage.ts` —
 `settings.language` (bg/en) and `settings.onboardingCompleted` ('true'). Nothing else is
-written to storage anywhere in `src/` (verified 2026-10-24). Features must not touch
-AsyncStorage directly (module comment, enforced by review).
+written to storage anywhere in `src/` (verified 2026-10-24; **re-verified 2026-10-24b for
+the Phase 3 wave** — no storage import exists in `src/hooks/`, the journey features or the
+new routes; the TanStack Query cache is in-memory ONLY, no persistence adapter
+(`persistQueryClient` absent from the tree), and the picker's pending-selection store is a
+module variable (`selection.ts:27-28`) — favourites/recent searches remain Phase 5).
+Features must not touch AsyncStorage directly (module comment, enforced by review).
 
 | STRIDE | Threat | Mitigation today | Required action |
 |--------|--------|------------------|-----------------|
@@ -120,10 +139,10 @@ AsyncStorage directly (module comment, enforced by review).
 
 | STRIDE | Threat | Mitigation today | Required action |
 |--------|--------|------------------|-----------------|
-| S | Rogue app/website invokes `bdztrain://` with crafted parameters (e.g. fake "payment success") | Scheme registered (`app.json:7`); **verified 2026-10-24: no route reads deep-link parameters** — no `useLocalSearchParams`/`route.params` anywhere in `src/`; route files navigate to fixed paths only | When ticketing exists: a deep-link return is **never** proof of payment — state re-fetched via `getOrder` (DEC-008 rule 1, `TicketingProvider` note). Validate every deep-link parameter (ids opaque, length-bounded) |
-| T | Path/route manipulation to reach flag-gated screens | Route set is fixed (`/`, `/search`, `/map`, `/trips`, `/settings`, `/onboarding`); no flag-gated routes exist yet | Phase 2/6: gated routes unreachable in release builds, tested |
-| I | Return URLs leak order ids into the OS/browser history | `returnUrl`/`cancelUrl` are app deep links by spec (`src/services/ticketing/TicketingProvider.ts:360-372`) | Keep order ids opaque; no PII in URLs ever |
-| D/E | — | — | — |
+| S | Rogue app/website invokes `bdztrain://` with crafted parameters (e.g. fake "payment success") | Scheme registered (`app.json:7`). **Since Phase 3 (2026-10-24b) three routes READ parameters** (`/search/results?from=&to=&date=`, `/search/station-picker?field=`, `/journey/[id]`) — DEC-022 §1. Verified handling: `date` is strict-validated (`isValidIsoDate`, `JourneyResultsScreen.tsx:57`), `field` is coerced to a `from`/`to` allow-list (`StationPickerScreen.tsx:29-31`), ids are opaque lookups only (unknown → `not_found`; fixture maps are Zod-parsed on every call). Malformed params render an actionable error state, never a crash (tested `journey-routes.test.tsx:88-93`). **Gap:** `from`/`to`/`id` are non-empty-checked but NOT length/format-bounded (W3B-M1) | Length-bound + charset-check every deep-link id at the route boundary (review W3B-M1); when ticketing exists: a deep-link return is **never** proof of payment — state re-fetched via `getOrder` (DEC-008 rule 1, `TicketingProvider` note) |
+| T | Path/route manipulation to reach flag-gated screens | Route set is fixed (`/`, `/search`, `/map`, `/trips`, `/settings`, `/onboarding`, `/search/results`, `/search/station-picker`, `/journey/[id]`); no flag-gated routes exist yet | Phase 2/6: gated routes unreachable in release builds, tested |
+| I | Return URLs leak order ids into the OS/browser history | `returnUrl`/`cancelUrl` are app deep links by spec (`src/services/ticketing/TicketingProvider.ts:360-372`). No param value is logged anywhere (zero `console.*` in `src/`); nothing renders `ProviderError.message`. **Residual:** the mock copies caller/deep-link ids into `error.message` (`MockTrainDataProvider.ts:174,374`) — W3B-L2 | Keep order ids opaque; no PII in URLs ever; make mock error messages static (W3B-L2 / W3-L1) before crash reporting lands |
+| D/E | Crafted/oversized params amplify memory (query-key + cache entries) | Query cache is in-memory with bounded `gcTime` (5 min journey / 30 min station); one cache entry per distinct key | Same length bounds as the S row cap the amplification (W3B-M1) |
 
 ### EP-4 — Provider responses *(future network boundary; mock only today)*
 
@@ -140,11 +159,11 @@ AsyncStorage directly (module comment, enforced by review).
 
 | STRIDE | Threat | Mitigation today | Required action |
 |--------|--------|------------------|-----------------|
-| S | Typosquatted dependency | All 24 direct deps verified to exist and be the intended packages (2026-10-22, incl. the non-obvious `test-renderer`, which is RNTL 14's declared peer dep); **Wave 3 additions re-verified 2026-10-24:** `zod@4.6.7` (MIT, `github.com/colinhacks/zod`) and `@react-native-async-storage/async-storage@2.2.0` (MIT, `github.com/react-native-async-storage/async-storage`) — exact names, official repos, the SDK 58 line (`expo/bundledNativeModules.json` pins 2.2.0). All lockfile entries resolve from `registry.npmjs.org` with integrity hashes | Keep the per-package typosquat check for every added dependency (checklist §5) |
+| S | Typosquatted dependency | All 24 direct deps verified to exist and be the intended packages (2026-10-22, incl. the non-obvious `test-renderer`, which is RNTL 14's declared peer dep); **Wave 3 additions re-verified 2026-10-24:** `zod@4.6.7` (MIT, `github.com/colinhacks/zod`) and `@react-native-async-storage/async-storage@2.2.0` (MIT, `github.com/react-native-async-storage/async-storage`) — exact names, official repos, the SDK 58 line (`expo/bundledNativeModules.json` pins 2.2.0). All lockfile entries resolve from `registry.npmjs.org` with integrity hashes. **Phase 3 additions re-verified 2026-10-24b (W3B-I1):** `react-hook-form@7.91.0`, `@hookform/resolvers@5.9.2`, `@tanstack/react-query@5.104.5` — exact names, official repos (`react-hook-form/*`, `TanStack/query`), all MIT; only two new transitives (`@standard-schema/utils@0.3.0`, `@tanstack/query-core@5.104.5`); the `zod` peer dedupes to the patched `4.6.7` | Keep the per-package typosquat check for every added dependency (checklist §5) |
 | T | Lockfile tampering / malicious install scripts | Lockfile committed; npm 11 blocks install scripts by default (`README.md:180-182`) | Pin CI actions to commit SHAs when a human owns CI (currently tag refs); review install-script allowlist when one is created |
 | R | Nobody can tell what a CI run did | CI runs are UNVERIFIED and honestly labelled (`README.md:18-20`) | Human must observe the first real run; branch protection + required checks (checklist §15) |
 | I | Secret in repo/Git history/bundle | Full-history scan found none (see `docs/security-privacy-review-2026-10-22.md` §1); re-run on the Wave 3 tree + all commits 2026-10-24: still none; `.gitignore`/`.dockerignore` cover `.env` + signing material incl. the F-04 additions | Secret-scanning in CI (gitleaks or GitHub secret scanning) before launch |
-| D | Compromised/vulnerable package breaks CI or dev machines | `npm audit` job exists (advisory); baseline CHANGED 2026-10-24: **5 findings (all high) from 2 advisories** — `braces` and `sprintf-js` advisories were **withdrawn** upstream (GHSA-vfj7-8cjw-p6xm withdrawn 2026-10-23; GHSA-hp3w-g68c-fv3c withdrawn 2026-10-22); `node-forge` (GHSA-86w9-cpqp-85rv) remains unpatched; **new** `zod` advisory GHSA-mrhx-c7xc-m3w5 (CVE-2023-54404, unbounded-array memory exhaustion) affects `zod <4.6.6` — the app's direct `zod@4.6.7` is **patched**; the vulnerable copy is `@expo/cli`'s nested `zod@3.25.76` (build tooling only, not in the app bundle) | Re-baseline the audit gate (review F-02): the counts moved, so an audit-diff gate must re-baseline now; decide with the security owner when `dependency-audit` becomes required |
+| D | Compromised/vulnerable package breaks CI or dev machines | `npm audit` job exists (advisory); baseline CHANGED 2026-10-24: **5 findings (all high) from 2 advisories** — `braces` and `sprintf-js` advisories were **withdrawn** upstream (GHSA-vfj7-8cjw-p6xm withdrawn 2026-10-23; GHSA-hp3w-g68c-fv3c withdrawn 2026-10-22); `node-forge` (GHSA-86w9-cpqp-85rv) remains unpatched; **new** `zod` advisory GHSA-mrhx-c7xc-m3w5 (CVE-2023-54404, unbounded-array memory exhaustion) affects `zod <4.6.6` — the app's direct `zod@4.6.7` is **patched**; the vulnerable copy is `@expo/cli`'s nested `zod@3.25.76` (build tooling only, not in the app bundle); **re-checked 2026-10-24b after the Phase 3 dependency additions: identical — 5 high / 0 moderate / 0 critical, 0 new advisories (W3B-I2)** | Re-baseline the audit gate (review F-02): the counts moved, so an audit-diff gate must re-baseline now; decide with the security owner when `dependency-audit` becomes required |
 | E | CI token over-permissioned | Workflow quality jobs use no secrets; **F-03 fixed** — `permissions: contents: read` at workflow level (`.github/workflows/ci.yml:16-17`, verified 2026-10-24) | Release credentials only in protected CI secrets (checklist §15); grant per-job permissions when release jobs arrive |
 
 ### EP-6 — Location and map *(nearby flow SHIPPED as a shell 2026-10-23; no location module yet; map SDK DEC-012 open)*
@@ -249,12 +268,31 @@ AsyncStorage directly (module comment, enforced by review).
   route); code review must reject any station dataset without a licence record.
 - AC-16: Search input abused to burn CPU/battery on a large future directory (pasted
   megabyte-long queries, token floods). Counter: pure linear substring matching today;
-  add `maxLength` on the input and a `limit` on results when the licensed directory lands
-  (review W3-L6).
-- AC-17: A future deep link pre-fills the station search or a journey query with hostile
-  text, hoping it is logged or rendered as markup. Counter: no route reads parameters today;
-  RN `Text` renders plain text (no WebView/HTML anywhere in the tree — verified); keep it
-  that way and never log the query.
+  the station-picker query is now bounded (`maxLength` 128, `StationPickerView.tsx:35,124`);
+  **the stations-screen input is still unbounded (W3B-L1/W3-L5)** — add `maxLength` there
+  and a `limit` on results when the licensed directory lands (review W3-L6).
+- AC-17: A deep link pre-fills the station search or a journey query with hostile text,
+  hoping it is logged or rendered as markup. **Since Phase 3 this is LIVE surface:**
+  `/search/results` and `/journey/[id]` take attacker-controlled params. Verified counters:
+  no param value is ever logged (zero `console.*` in `src/`), nothing renders
+  `ProviderError.message`, RN `Text` renders plain text (no WebView/HTML anywhere in the
+  tree), ids are opaque lookups and `date` is strict-validated. Keep it that way and never
+  log the query. Residual gaps: length/format bounds on ids (W3B-M1) and static mock error
+  messages (W3B-L2).
+
+**Journey flow — deep links and data layer (new with Phase 3)**
+- AC-18: A rogue app floods `bdztrain:///search/results?from=<megabytes>` (or thousands of
+  distinct `id`s) to amplify memory via TanStack query keys/cache entries or to poison
+  future error/crash objects. Counter: in-memory cache with bounded `gcTime` caps the
+  window; **fix the length/format bounds at the route boundary (W3B-M1)** and make mock
+  error messages static (W3B-L2) before crash reporting exists.
+- AC-19: Travel intent (which stations a person searches, when) is reconstructed from
+  storage, logs or crash reports. Counter (verified 2026-10-24b): nothing is persisted
+  (the query cache and the single-slot selection store are memory-only and die with the
+  process), there is no logging and no crash reporting; when either lands, the logging
+  policy must ban `JourneySearch`, station text and param values (checklist §14), and
+  Phase 5 favourites/recent searches must ship with the documented caps + deletion
+  (`src/types/favourites.ts:174-178`).
 
 ## 6. Review and maintenance rules
 

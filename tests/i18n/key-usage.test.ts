@@ -37,6 +37,10 @@ const REGISTRY_FILES = [
   'i18n/keys.ts',
   'features/stations/translationKeys.ts',
   'features/onboarding/onboardingSteps.ts',
+  'features/journey-search/translationKeys.ts',
+  'features/journey-results/translationKeys.ts',
+  'features/journey-details/translationKeys.ts',
+  'features/station-picker/translationKeys.ts',
 ];
 
 function listSourceFiles(dir: string): string[] {

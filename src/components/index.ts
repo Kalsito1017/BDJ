@@ -17,6 +17,11 @@ export { Loader, type LoaderProps } from './Loader';
 export { OfflineState, type OfflineStateProps } from './OfflineState';
 export { PlaceholderScreen, type PlaceholderScreenProps } from './PlaceholderScreen';
 export { ProvenanceBadge, type ProvenanceBadgeProps } from './ProvenanceBadge';
+export {
+  providerErrorCode,
+  RequestErrorState,
+  type RequestErrorStateProps,
+} from './RequestErrorState';
 export { ScreenContainer, type ScreenContainerProps } from './ScreenContainer';
 export {
   ScreenStatesPreview,

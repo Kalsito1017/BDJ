@@ -17,9 +17,14 @@ import MapScreen from '../../src/app/(tabs)/map';
 import SearchScreen from '../../src/app/(tabs)/search';
 import SettingsScreen from '../../src/app/(tabs)/settings';
 import TripsScreen from '../../src/app/(tabs)/trips';
+import { JourneyDetailsView } from '../../src/features/journey-details/JourneyDetailsView';
+import { JourneyResultsView } from '../../src/features/journey-results/JourneyResultsView';
 import { OnboardingFlow } from '../../src/features/onboarding';
+import { StationPickerView } from '../../src/features/station-picker/StationPickerView';
 import { createMemorySettingsStorage } from '../../src/services/storage/settingsStorage';
 import { setI18nLocale, translate } from '../../src/i18n';
+import type { Journey, TrainSegment, TransferSegment } from '../../src/types/journey';
+import type { Station } from '../../src/types/station';
 
 beforeAll(() => {
   setI18nLocale('en');
@@ -117,5 +122,151 @@ describe('onboarding guide', () => {
     // Step 3 (Tickets) must state the purchase path without selling anything.
     expectNoClaims('onboarding tickets step', renderedText());
     expect(screen.queryByRole('button', { name: /buy|purchase|pay/i })).toBeNull();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Phase 3/4 journey flow surfaces (mobile-ui): station picker,        */
+/* results and details. Synthetic demo data; the same claim lexicon    */
+/* applies to every string these surfaces render.                      */
+/* ------------------------------------------------------------------ */
+
+function demoStation(id: string, name: string, alternateName?: string): Station {
+  return {
+    id,
+    name,
+    alternateName,
+    countryCode: 'BG',
+    provenance: { kind: 'demo', fetchedAt: '2026-10-24T00:00:00.000Z' },
+  };
+}
+
+function demoTrain(overrides: Partial<TrainSegment> = {}): TrainSegment {
+  return {
+    kind: 'train',
+    fromStationId: 'sofia',
+    toStationId: 'varna',
+    departureTime: '23:40',
+    arrivalTime: '06:15',
+    trainNumber: '1234',
+    providerStatus: 'Планирано по разписание от източника',
+    provenance: { kind: 'demo', fetchedAt: '2026-10-24T00:00:00.000Z' },
+    ...overrides,
+  };
+}
+
+function demoTransfer(): TransferSegment {
+  return {
+    kind: 'transfer',
+    fromStationId: 'varna',
+    toStationId: 'varna',
+    plannedMinutes: 15,
+    stationChangeRequired: true,
+    provenance: { kind: 'demo', fetchedAt: '2026-10-24T00:00:00.000Z' },
+  };
+}
+
+const DEMO_JOURNEY: Journey = {
+  id: 'j-demo',
+  legs: [
+    demoTrain(),
+    demoTransfer(),
+    demoTrain({ departureTime: null, arrivalTime: null }),
+  ],
+  segments: [demoTrain(), demoTrain({ departureTime: null, arrivalTime: null })],
+  durationMinutes: 420,
+  provenance: { kind: 'demo', fetchedAt: '2026-10-24T00:00:00.000Z' },
+};
+
+describe('journey flow surfaces (Phase 3/4)', () => {
+  it('makes no claims on the station picker', async () => {
+    await render(
+      <StationPickerView
+        error={null}
+        loading={false}
+        onClose={() => {}}
+        onSelectStation={() => {}}
+        onQueryChange={() => {}}
+        query=""
+        stations={[
+          demoStation('sofia', 'Демо Централна гара София', 'Demo Sofia Central Station'),
+          demoStation('long', 'Карлуково-Община Роман Северозападна гара с дълго име'),
+        ]}
+        t={t}
+        testID="picker"
+      />,
+    );
+
+    expectNoClaims('station picker', renderedText());
+    expect(screen.getAllByText(t('provenance.demo')).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(t('stations.demo.notice'))).toBeTruthy();
+  });
+
+  it('makes no claims on the journey results list', async () => {
+    await render(
+      <JourneyResultsView
+        dateLabel="24.10.2026 г."
+        error={null}
+        fetchedAtTime="09:42"
+        fromName="Демо Централна гара София"
+        journeys={[DEMO_JOURNEY]}
+        loading={false}
+        onRetry={() => {}}
+        onSelectJourney={() => {}}
+        t={t}
+        testID="results"
+        toName="Демо гара Варна"
+      />,
+    );
+
+    expectNoClaims('journey results', renderedText());
+    expect(screen.getAllByText(t('provenance.demo')).length).toBeGreaterThan(0);
+    expect(screen.getByText(t('provenance.demo_desc'))).toBeTruthy();
+  });
+
+  it('makes no claims on the journey details timeline', async () => {
+    await render(
+      <JourneyDetailsView
+        error={null}
+        journey={DEMO_JOURNEY}
+        loading={false}
+        onBack={() => {}}
+        onRetry={() => {}}
+        stationName={(id) =>
+          id === 'sofia' ? 'Демо Централна гара София' : 'Демо гара Варна'
+        }
+        t={t}
+        testID="details"
+      />,
+    );
+
+    expectNoClaims('journey details', renderedText());
+    expect(screen.getAllByText(t('provenance.demo')).length).toBeGreaterThan(0);
+    expect(screen.getByText(t('provenance.demo_desc'))).toBeTruthy();
+  });
+
+  it('makes no claims in the failure states of the results screen', async () => {
+    for (const code of [
+      'timeout',
+      'offline',
+      'network',
+      'upstream_error',
+      'unknown',
+    ] as const) {
+      await render(
+        <JourneyResultsView
+          dateLabel="24.10.2026 г."
+          error={{ code, message: 'synthetic', retryable: true }}
+          fromName="Демо Централна гара София"
+          journeys={[]}
+          loading={false}
+          onRetry={() => {}}
+          t={t}
+          testID="results-error"
+          toName="Демо гара Варна"
+        />,
+      );
+      expectNoClaims(`journey results error (${code})`, renderedText());
+    }
   });
 });

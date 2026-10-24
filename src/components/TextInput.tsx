@@ -37,6 +37,8 @@ export interface TextInputProps {
   secureTextEntry?: boolean;
   keyboardType?: KeyboardTypeOptions;
   autoCapitalize?: RNTextInputProps['autoCapitalize'];
+  /** Input length bound (DEC-019 W3-L5: bound free text before a real directory lands). */
+  maxLength?: number;
   testID?: string;
 }
 
@@ -52,6 +54,7 @@ export function TextInput({
   secureTextEntry,
   keyboardType,
   autoCapitalize,
+  maxLength,
   testID,
 }: TextInputProps) {
   const theme = useTheme();
@@ -76,6 +79,7 @@ export function TextInput({
         autoCapitalize={autoCapitalize}
         editable={editable}
         keyboardType={keyboardType}
+        maxLength={maxLength}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.textDisabled}

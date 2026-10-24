@@ -1,13 +1,11 @@
 /**
- * Search tab (placeholder until Phase 3 journey search).
+ * Search tab — the journey search form (`/search`, DEC-005 route contract).
  *
- * No timetable data is shown here yet (DEC-002: mock-only data source), and
- * nothing on this screen requires an account (plan.md 17.2).
+ * Phase 3 replaces the Phase 2 placeholder with the real form
+ * (plan.md §3.1). Journey search works WITHOUT any account (plan.md 17.2).
  */
-import { PlaceholderScreen } from '../../components';
-import { useTranslation } from '../../i18n';
+import { JourneySearchScreen } from '../../features/journey-search';
 
 export default function SearchScreen() {
-  const { t } = useTranslation();
-  return <PlaceholderScreen testID="screen-search" title={t('nav.search')} />;
+  return <JourneySearchScreen testID="screen-search" />;
 }
