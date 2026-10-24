@@ -21,11 +21,11 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY . .
-
-# Least privilege (security review F-06): run tooling as the base image's
-# unprivileged `node` user; only the app tree's ownership changes.
-RUN chown -R node:node /app
+# Least privilege (security review F-06): files are extracted as the base
+# image's unprivileged `node` user and the process runs as `node`. COPY
+# --chown avoids a separate chown layer over node_modules, which proved too
+# heavy for this host's Docker daemon.
+COPY --chown=node:node . .
 USER node
 
 EXPOSE 8081

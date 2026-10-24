@@ -53,6 +53,13 @@ export interface ProviderError {
   readonly occurredAt: ISODateTime;
   /** Original thrown value for crash reporting; never rendered or logged raw. */
   readonly cause?: unknown;
+  /**
+   * Developer-facing diagnostic labels ONLY: schema paths, error codes,
+   * type/shape summaries. MUST NOT contain payload values (they may be PII),
+   * secrets or card data (rules 4 and 7). Used e.g. to record WHERE a Zod
+   * boundary validation failed ("journeys.0.segments.1.departureTime").
+   */
+  readonly diagnostics?: readonly string[];
 }
 
 /** Human-readable hint key for i18n; UI maps `code` -> localized message. */

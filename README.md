@@ -146,21 +146,27 @@ Docker provides a repeatable Node toolchain — nothing more.
 - the Expo/Metro dev server published on `http://localhost:8081`
   (`curl http://localhost:8081/status` → `packager-status:running`)
 
-**Verification status (2026-10-22):**
+**Verification status (2026-10-24):**
 
-- `docker compose config` — **PASSED** (compose file parses and resolves).
-- `docker build` — **BLOCKED, NOT RUN**: the Docker daemon on this machine is
-  not running (`docker version` shows the client only; `systemctl start docker`
-  requires interactive authentication, which an agent must not bypass).
-  Therefore `npm ci` inside the image and the Metro-in-container reachability
-  check are **NOT RUN** — nobody has seen them work yet.
-- Metro itself was verified on the **host** (not in Docker): `expo start` on
-  port 8081 answered `curl http://localhost:8081/status` with
-  `packager-status:running`, and Android + iOS dev bundles built with HTTP 200
-  including the `src/app` placeholder screen (route root `src/app` is
-  auto-detected and configured via `app.json` → `expo-router.root`).
-- Re-run the container checks on a machine with a running Docker daemon before
-  treating the Docker path as verified.
+- `docker compose config` — **PASSED**.
+- `docker compose build` — **PASSED** (image `bdj-mobile`; `npm ci` runs during
+  the image build). Note: the first build attempt crashed this host's Docker
+  daemon at a `RUN chown -R node:node /app` layer; the Dockerfile now uses
+  `COPY --chown=node:node` + `USER node` (same non-root result, lighter layer —
+  DEC-020).
+- Gates inside the container (`docker compose run --rm mobile ...`) — **PASSED**:
+  `npm run typecheck`, `npm run lint`, `npm test` → **435 passed / 435 in 35
+  suites**. Two tests needed explicit 20s timeouts (they exceeded Jest's 5s
+  default under container CPU load — recorded as a defect + fix, DEC-020).
+- Metro reachability from the host — **PASSED**: `docker compose up -d`, then
+  `curl http://127.0.0.1:8081/status` → `packager-status:running`. The port is
+  published on loopback only per security finding F-01; change the compose
+  mapping to `'8081:8081'` deliberately (and only on a trusted LAN) when
+  testing on a physical device.
+- Metro on the **host** was verified earlier: `expo start` answered
+  `curl http://localhost:8081/status` with `packager-status:running`, and
+  Android + iOS dev bundles built with HTTP 200 including the placeholder
+  screen (route root `src/app`).
 
 **Out of scope — will NOT work and is not claimed:**
 

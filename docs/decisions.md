@@ -25,6 +25,12 @@ Entries follow: **ID — Title**; *Date*; *Status*; Context; Decision; Consequen
 | DEC-012 | Map SDK selection | Open |
 | DEC-013 | Phase 0 integration record (lead verification + reconciliation) | Noted |
 | DEC-014 | Phase 1 integration record: independent review findings and disposition | Noted |
+| DEC-015 | Phase 2 UI shell: theme, routes, onboarding, UI states | Accepted |
+| DEC-016 | i18n key governance: naming rules, locale-file ownership, claim-safe copy | Accepted |
+| DEC-017 | Mock data layer: schemas, MockTrainDataProvider, shared request executor | Accepted |
+| DEC-018 | Wave 3 integration record (i18n reconciliation + Map tab wiring) | Noted |
+| DEC-019 | Wave 5 review record: findings disposition, i18n vocabulary rule, audit re-baseline | Noted |
+| DEC-020 | Docker verification record (Phase 1 criterion closed) | Noted |
 
 ---
 
@@ -550,25 +556,37 @@ is local development only, never a production-capacity argument
 
 ## DEC-012 — Map SDK selection
 
-- **Date:** 2026-10-22
-- **Status:** Open (decision deferred)
+- **Date:** 2026-10-22 (research) — **decided by the human owner 2026-10-24**
+- **Status:** Accepted
 
 **Context.** plan.md 17.5 and checklist §9 require a map SDK chosen after
 reviewing mobile SDK support, offline behaviour, costs, attribution, data
 licensing, privacy and rate limits, and the choice documented here. The map
 feature is behind the `mapStationDiscovery` flag (default ON in code, but the
 feature cannot ship without this decision + a licensed station dataset).
+`docs/map-sdk-comparison.md` compares 5 candidates with every claim labelled
+"verified from source" or "assumption" (2026-10-23).
 
-**Decision.** **Not decided.** No candidate is recommended yet because the
-required review (licensing, tile caching rights, cost, attribution, privacy,
-rate limits) has not been performed by this agent. To be decided by a research
-task before `features/map/` is built; record the chosen SDK, its license, key
-handling (map SDK keys are **public** identifiers — restrict by bundle
-ID/package name, checklist §5) and attribution requirements in a new entry.
+**Decision (human owner, 2026-10-24).** **MapLibre React Native**
+(`@maplibre/maplibre-react-native`, MIT; engine BSD-2) with OSM-based tiles
+(OpenFreeMap public instance initially; self-host fallback). No map API key.
 
-**Consequences.** Map UI work is blocked on this entry; list-based station
-discovery is not blocked and must exist regardless (accessible alternative,
-checklist §9).
+- Tile caching permitted by OpenFreeMap terms: ≤3,000 tiles or ≤50 MB per
+  download, ≤4 parallel requests, unique User-Agent.
+- Required attribution in the map UI: "OpenFreeMap © OpenMapTiles Data from
+  OpenStreetMap" plus "© OpenStreetMap contributors — data available under the
+  Open Database License (ODbL), https://www.openstreetmap.org/copyright".
+- Map lines/markers never imply operational routes or real-time service (rule 6).
+- **Station dataset stays the labelled DEMO set** until a licensed source is
+  approved (`docs/station-dataset-licensing.md`; OSM-derived extract only after
+  legal clears ODbL classification/attribution; community GTFS mirrors remain
+  PROHIBITED per DEC-013). A marker is therefore never a claim about real
+  service.
+
+**Consequences.** The dependency is installed only in the map wave (DEC-009
+verification applies). Until then the map area remains a labelled placeholder.
+Rejected alternatives (Google Maps SDK: keys + billing + no-caching tile terms;
+Mapbox: commercial terms) are recorded in `docs/map-sdk-comparison.md`.
 
 ---
 
@@ -806,3 +824,247 @@ can be verified, or accept it as documented-not-verified for now. (9) Decide
 whether the two local commits ahead of `origin/main` are pushed, and who
 maintains the GitHub repo going forward. (10) Security owner to decide on the
 dependency-audit gate (M3/F-02).
+
+---
+
+## DEC-015 — Phase 2 UI shell: theme, routes, onboarding, UI states
+
+- **Date:** 2026-10-23
+- **Status:** Accepted
+
+**Context.** plan.md §8/§9-Phase 2/§17.7, checklist §7/§10.
+
+**Decision.** Custom design system in `src/components/` (no UI framework
+dependency; DEC-009 preserved) over a light+dark token palette whose WCAG-AA
+contrast is asserted by `tests/mobile-ui/theme.test.ts` (min text 4.5:1, min UI
+3:1; light textPrimary/bg 15.06:1, onPrimary/primary 8.16:1 — full list in
+`src/theme/colors.ts`). Deep-link routes exactly `/`, `/search`, `/map`,
+`/trips`, `/settings`, `/onboarding` (tab group `(tabs)`; renaming needs a new
+entry). Onboarding: 4 skippable steps, completion persisted via `settingsStorage`
+(`settings.onboardingCompleted` = 'true' on finish *and* skip), gated at first
+launch, replayable at `/onboarding`; it requests no permissions and preselects
+no consent. All data-driven UI renders provenance labelling; `DemoDataNotice`
+appears on every placeholder screen. Touch targets ≥44dp.
+
+**Consequences.** (+) Claim-lexicon regression test covers every screen
+(rule 6). (+) `ConfirmDialog` ready for Phase 5 destructive actions. (−) The
+ESLint import resolver cannot read package `exports` subpaths
+(`expo-router/js-tabs`), so two files carry documented `import/*` disables —
+remove when the resolver is upgraded. (−) Dark theme is complete but the app
+renders light only (system-scheme wiring deferred).
+
+---
+
+## DEC-016 — i18n key governance: naming rules, locale-file ownership, claim-safe copy
+
+- **Date:** 2026-10-23
+- **Status:** Accepted
+
+**Context.** Wave 3 produced two divergent key sets for the same screens
+(`i18n-a11y` invented `stations.*`/`map.*` keys; `map-stations` defined its own
+contract in `src/features/stations/translationKeys.ts`), and body copy landed
+in the `common.*` control namespace. The lead reconciled them (DEC-018).
+
+**Decision.**
+
+1. **Naming:** flat dot-separated `snake_case` segments only
+   (`/^[a-z0-9_]+(\.[a-z0-9_]+)+$/`) — enforced by
+   `tests/i18n/locale-parity.test.ts`. Hyphens and camelCase are rejected.
+2. **Length guards** (same suite): `common.*`/`nav.*` control strings ≤24 chars;
+   keys ending `_label`/`_cta`/`_placeholder`/`_title`/`.title` ≤48 chars; any
+   value ≤400 chars; bg ≤ 4×en + 30.
+3. **Ownership:** `src/i18n/locales/*` is single-owner. In parallel waves,
+   feature agents propose keys (their contract file is the source of truth) and
+   ONE agent/lead merges them — parallel edits to the catalogs caused the Wave 3
+   reconciliation.
+4. **Locales:** `DEFAULT_LOCALE='bg'` (market), `FALLBACK_LOCALE='en'`; missing
+   keys render the key itself, never blank; parity test fails on missing keys,
+   empty values, placeholder mismatches and untranslated values.
+5. **Claim-safe copy:** privacy/permission/disclaimer copy avoids the claim-
+   lexicon words (`position`, `tracking`, `location`, `live`, `real-time`,
+   `delay`, `official`, `on-time`, `guarantee`) — e.g. "see where you are". The
+   lexicon guard stays strict; no allow-list beyond the provenance *category*
+   labels (`provenance.real_time*`, which render only with real provenance).
+6. **Human review:** `TRANSLATION_REVIEW_KEYS` + `review.<key>` notes mark
+   legal/payment/ticket wording; none of it may ship without human translation
+   review (checklist §8).
+
+---
+
+## DEC-017 — Mock data layer: schemas, MockTrainDataProvider, shared request executor
+
+- **Date:** 2026-10-23
+- **Status:** Accepted
+
+**Context.** plan.md §4/§9-Phase 4; DEC-002/006/007/008; Appendices A.1 and B.
+
+**Decision.** Zod (4.6.7, lead-installed per DEC-009 baseline) boundary schemas
+in `src/services/train-data/schemas/` parse every external payload before
+mapping (unknown fields stripped, schema paths only in diagnostics). `MockTrainDataProvider` implements Appendix A.1 exactly: demo-only provenance,
+fixtures module, deterministic scenarios
+(`success|empty|malformed|timeout|upstream_error|offline|rate_limited`), injected
+clock, all rejections are `ProviderError`. `LiveTrainDataProvider` is **not
+created** (DEC-002 stricter rule — nothing to stub until a source is approved).
+`MockTicketingProvider` and `OrderSchema`/`TicketSchema` are deferred to the
+ticketing phase (flag OFF, DEC-004).
+
+**Amends DEC-005:** the timeout/cancel/bounded-retry-with-jitter executor and
+error normalisation live in `src/services/api/`, not `services/common/`
+(`RequestOptions` and the retry policy types stay in `services/common/`).
+`ProviderError` gained optional `diagnostics: readonly string[]` (schema paths /
+issue codes only — never payload values, no PII).
+
+**Consequences.** (+) TanStack Query caching deliberately deferred to Phase 4 —
+no dependency added. (+) Fixture invariant validator re-checks
+`segments === legs.filter(train)` on every fixture.
+
+---
+
+## DEC-018 — Wave 3 integration record (i18n reconciliation + Map tab wiring)
+
+- **Date:** 2026-10-23
+- **Status:** Noted
+
+**Context.** Wave 3 ran `mobile-ui`, `i18n-a11y`, `data-provider`,
+`map-stations` in parallel on disjoint directories; the lead integrated.
+
+**Lead actions (2026-10-23).**
+
+1. **Pre-work:** installed `zod@4.6.7` and
+   `@react-native-async-storage/async-storage` — `expo install` resolved
+   **2.2.0** (the SDK 58-compatible line; npm latest is 3.1.1) — plus the
+   shared `src/services/storage/settingsStorage.ts` contract so parallel agents
+   compiled against one dependency.
+2. **i18n reconciliation:** restored the 24 `stations.*`/`map.*` keys pinned by
+   `tests/i18n/*` contracts (deleting them was wrong: **tests are consumers
+   too**), renamed 9 `map-stations` keys to flat `snake_case` (and
+   `map.attribution.placeholder` → `map.attribution.note`), moved 3 body-copy
+   keys out of the `common.*` control namespace into `scaffold.*`. Catalogs:
+   **201 keys per locale**, parity/length/Cyrillic guards green.
+3. **Map tab:** wired `StationsScreen` (map-stations) into `/map`; the map area
+   itself remains a labelled placeholder pending DEC-012. Adjusted two
+   mobile-ui tests for the Map tab's stations demo labelling — rule-6 intent
+   preserved (demo label visible; claim lexicon still strict and passing).
+4. **Copy fix:** stations privacy/disclaimer copy rephrased to the claim-safe
+   convention (DEC-016 §5) instead of weakening the lexicon.
+
+**Gates after integration (lead-run, real output).** `npm run typecheck` PASS ·
+`npm run lint` 0 errors/0 warnings · `npm run format:check` PASS · `npm test`
+**389 passed / 389 in 31 suites**.
+
+**Not verified / blocked.** No device or simulator (Linux): VoiceOver/TalkBack
+scripts, Hermes `Intl` behaviour and native builds remain **NOT RUN** (rules 5,
+8). CI runs remain **UNVERIFIED** (DEC-014).
+
+**Human decisions added.** (11) DEC-012 map SDK + station-dataset route
+(recommendation ready: MapLibre + OpenFreeMap/OSM — see
+`docs/map-sdk-comparison.md` and `docs/station-dataset-licensing.md`; install
+only after human confirmation).
+
+---
+
+## DEC-019 — Wave 5 review record: findings disposition, i18n vocabulary rule, audit re-baseline
+
+- **Date:** 2026-10-24
+- **Status:** Noted
+
+**Context.** Wave 3 was reviewed independently by `reviewer-qa` (did not author
+the code) and `security-privacy`. Evidence: reviewer report,
+`docs/security-privacy-review-2026-10-24.md`, updated `docs/threat-model.md`.
+
+**Verdicts.** `reviewer-qa`: **FAIL → fixed** (1 high, 2 medium, 8 low).
+`security-privacy`: **no critical/high, no secrets anywhere** (1 medium
+hardening, 5 low). Both re-ran the gates themselves: baseline
+"389/389 in 31 suites" verified exactly.
+
+**Fixed by the lead (2026-10-24), gates re-run:**
+
+| Finding | Fix | Verification |
+|---------|-----|--------------|
+| H1 raw i18n key `common.states_demo` rendered as copy on 4 screens (`src/components/ScreenStatesPreview.tsx:43` — the key never existed; mobile-ui's code drifted from its own key list, and the DEC-018 rename `common.* → scaffold.*` missed it) | one line → `t('scaffold.states_preview')` | `npm test` **435/435 in 35 suites** (incl. the 2 guard suites that reproduced H1), typecheck/lint/format clean |
+
+**Adopted permanently** (reviewer's test additions): `tests/i18n/key-usage.test.ts`
+(every `t()`/registry key must exist in both catalogs),
+`tests/mobile-ui/i18n-integrity.test.tsx` (no screen renders raw keys, bg + en),
+`tests/i18n/claim-lexicon-catalogs.test.ts` (catalog-level rule-6 lexicon in
+BOTH locales, 3-entry allow-list with anti-creep assertion),
+`tests/stations/station-search-edge.test.ts` (degenerate input).
+
+**i18n vocabulary rule (DEC-016 extension, applies before Phase 3).** Two
+parallel vocabularies for stations/map exist (M1): the stations feature's own
+contract (`src/features/stations/translationKeys.ts`) and the restored
+`stations.*`/`map.*` set. Rule going forward: **one vocabulary per surface** —
+the stations feature consumes only its contract file; the restored keys with no
+UI yet (`stations.detail.find_trains`, `stations.detail.add_favourite`, …) are
+**RESERVED for Phase 3** surfaces (station picker, journey flow) and must be
+reused rather than re-invented; duplicate concepts (`stations.empty` vs
+`stations.list.empty.title`) are consolidated in one Phase 3 pass, reviewed by
+the lead. No new catalog keys without lead review (DEC-016 §3).
+
+**Dependency-audit re-baseline (security-privacy, verified 2026-10-24).** The
+2026-10-22 baseline (48 findings / 3 advisories) is **stale**: `braces`
+(GHSA-vfj7-8cjw-p6xm) and `sprintf-js` (GHSA-hp3w-g68c-fv3c) were **withdrawn
+upstream** on 2026-10-23/22; current `npm audit` = **5 high from 2 advisories**:
+`node-forge` (GHSA-86w9-cpqp-85rv, transitive via `@expo/code-signing-certificates`,
+no patch available) and the new `zod` GHSA-mrhx-c7xc-m3w5 which affects only
+`@expo/cli`'s nested `zod@3.25.76` (build tooling, not the app bundle — the
+app's direct `zod@4.6.7` is patched). The CI `dependency-audit` job and any
+audit-diff baseline must be re-baselined to these counts by the security owner;
+`npm audit fix --force` remains forbidden.
+
+**Deferred (owner → item).**
+
+- data-provider (next wave): W3-M1 Zod `.max()` bounds on ids/names/arrays in
+  `src/services/train-data/schemas/` (unbounded strings/arrays = same weakness
+  class as the zod advisory); W3-L1 raw ids in `ProviderError.message`
+  (violates the no-payload-values contract); W3-L2 truncate key names in
+  `safePayloadSummary`; W3-L3 `Map`/`Object.hasOwn` for id lookups. The mock is
+  the reference implementation future providers will copy.
+- i18n: W3-L4 prototype-chain guard in `createTranslator`; L3 align the
+  DEC-016 allow-list wording with `stations.provenance.real_time`.
+- mobile-ui/map-stations: W3-L5 `maxLength` on the station search input before
+  a real directory lands; L5 converge the two `ProvenanceBadge` components;
+  L4 `{{...}}` vs `{...}` placeholder style in `tests/stations/testSupport.tsx`;
+  L1 remove the stale `PENDING_KEYS` list; L7 document `healthCheck` semantics
+  for `empty`/`malformed` scenarios; L8 `mapStationDiscovery` flag ON is **not**
+  a ship approval (DEC-012 + licensed dataset still required).
+- Phase 5: `stations.offline.banner` is currently unreachable
+  (`StationsScreen` hardcodes `networkStatus='online'`) — wire real network
+  status when offline handling lands.
+
+---
+
+## DEC-020 — Docker verification record (Phase 1 criterion closed)
+
+- **Date:** 2026-10-24
+- **Status:** Noted
+
+**Context.** DEC-014 recorded the Docker path as BLOCKED (daemon down; start
+needs interactive auth). The human owner started the daemon (DEC-014 human
+decision #8 — resolved: **verify**). This entry records the verification and
+two changes it forced.
+
+**Verified (real output, 2026-10-24).**
+
+| Check | Result |
+|-------|--------|
+| `docker compose build` (image `bdj-mobile`, `npm ci` in build) | **PASS** |
+| In-container gates: `npm run typecheck`, `npm run lint`, `npm test` | **PASS** — **435/435 tests, 35 suites** |
+| Metro reachable from host: `curl http://127.0.0.1:8081/status` after `docker compose up -d` | **PASS** — `packager-status:running` (loopback-only publish, F-01) |
+
+**Defect found + fixed during verification.** The first build **crashed this
+host's Docker daemon** at the `RUN chown -R node:node /app` layer (EOF from the
+build RPC; the layer duplicates the whole `node_modules` tree). Fix: the
+Dockerfile now uses `COPY --chown=node:node . .` + `USER node` — same non-root
+result (F-06 intact), far lighter layer. Separately, two tests
+(`tests/mobile-ui/states.test.tsx` ConfirmDialog flow,
+`tests/mobile-ui/onboarding.test.tsx` walk-through) exceeded Jest's 5s default
+under container CPU load (reproducible: 433/435 twice; green in isolation).
+Per the checklist these flaky tests were treated as defects: bounded
+`jest.setTimeout(20000)` in those two files → 435/435 in-container.
+
+**Phase 1 acceptance criteria — final status.** Clean install ✅ · quality gates
+✅ (host + container) · Docker tooling and host reachability ✅ · documented iOS
+path ✅ (as documentation; **NOT RUN** — Linux host, rule 8) · CI ⚠️
+**UNVERIFIED** (workflow exists; no agent has seen a run). Android native build
+remains **NOT RUN** (no SDK here).

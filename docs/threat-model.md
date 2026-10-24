@@ -1,16 +1,23 @@
 # Threat Model — BDZ Train Companion App
 
 **Created:** 2026-10-22 (security-privacy specialist subagent, Phase 0 + Phase 1 review).
+**Updated:** 2026-10-24 (same subagent — Wave 3 review: theme/components/app shell,
+onboarding, stations + nearby, i18n, mock data layer, settings storage).
 **Status:** DRAFT for human review. No human security owner has reviewed this document
 (addbeforerelease.txt §17: "Security / compliance owner" — UNASSIGNED).
 **Required by:** addbeforerelease.txt §5 ("Threat model written before launch");
 `docs/legal-compliance-matrix.md` row 18.
 
-**Scope of the system today (verified 2026-10-22):** React Native + TypeScript (Expo SDK 58)
+**Scope of the system today (verified 2026-10-24):** React Native + TypeScript (Expo SDK 58)
 mobile client, mock-only data (DEC-002), **no backend** (DEC-003), **no accounts**, **no
-ticketing** (flag `ticketSales` OFF, DEC-004), **no analytics** (flag `analytics` OFF), no
-network traffic at all (the only screen is a placeholder — `src/app/index.tsx`). Everything
-marked *(future)* below is a design target for a system that does not exist yet; it is modelled
+ticketing** (flag `ticketSales` OFF, DEC-004), **no analytics** (flag `analytics` OFF; zero
+analytics code in the tree), **zero network calls** (re-verified 2026-10-24: no
+`fetch`/`XMLHttpRequest`/`axios`/`WebSocket`/`sendBeacon`/`Linking.openURL` anywhere in
+`src/` or `tests/` — the only `http` occurrence is a doc-comment URL in `src/test/setup.ts`).
+The UI now has a real tab shell (`src/app/(tabs)/`), first-launch onboarding, a stations
+feature (search over a bundled synthetic demo dataset + nearby-stations flow shell), and
+i18n (bg/en) — see the 2026-10-24 updates in EP-1/EP-2/EP-3/EP-6 and §5. Everything marked
+*(future)* below is a design target for a system that does not exist yet; it is modelled
 now so the seams built today (provider interfaces, feature flags) can be checked against it.
 
 This is an engineering document, not legal advice and not a penetration-test substitute.
@@ -22,7 +29,8 @@ This is an engineering document, not legal advice and not a penetration-test sub
 | ID | Asset | Where it lives today | Sensitivity |
 |----|-------|----------------------|-------------|
 | A1 | **User travel intent** — recent searches, favourite routes/stations (origin→destination pairs reveal where a person goes) | Planned on-device AsyncStorage (`src/types/favourites.ts`) | Personal data (GDPR); on-device only |
-| A2 | **User location** (foreground, only for a future "nearby stations" feature) | Not collected today | Sensitive personal data; minimisation rules in plan.md 17.5 |
+| A1b | **Local settings** — language choice + onboarding-completed flag | AsyncStorage via `src/services/storage/settingsStorage.ts` (exactly two keys: `settings.language`, `settings.onboardingCompleted` — verified 2026-10-24) | Non-personal / low sensitivity; no identifiers, no timestamps |
+| A2 | **User location** (foreground, only for the "nearby stations" feature) | Not collected today: the nearby flow exists (`src/features/stations/model/nearby.ts`) but **no location module is installed** (`expo-location` is not a dependency) and the default `LocationPort` reports `unavailable` (`src/features/stations/StationsScreen.tsx:40-47`) | Sensitive personal data; minimisation rules in plan.md 17.5 |
 | A3 | **Information provenance labels** — the guarantee that demo/scheduled/cached-stale/real-time are never conflated | `src/types/provenance.ts`, feature flags | Integrity/trust asset: the app's honesty is a product feature (rule 6) |
 | A4 | **Future session tokens** (access/refresh) for accounts | None today; Keychain/Keystore via `expo-secure-store` when built (DEC-001, plan.md 17.2) | Credential |
 | A5 | **Future order/ticket data** — order ids, payment *references* (never card data), ticket artefacts | None today (spec only: `src/types/order.ts`, `src/types/ticket.ts`) | Personal + financial metadata |
@@ -54,6 +62,10 @@ a security incident-level design error, not a schema change.
 1. **TB1:** User ↔ app UI (all text input; deep links).
 2. **TB2:** App ↔ on-device storage (AsyncStorage/SecureStore — untrusted on a compromised
    device; `src/types/favourites.ts:120-123` already mandates re-validation on read).
+   **Live since Wave 3** for the two settings keys only: reads fall back to safe defaults on
+   any failure (`settingsStorage.ts:50-57`), values are re-narrowed by callers
+   (`catalog.ts:61-65` for the language tag, `OnboardingGate.tsx:36-41` compares `'true'`).
+   Token storage (future) MUST go to SecureStore, never here (checklist §3).
 3. **TB3:** App ↔ train-data provider *(future network boundary)* — HTTPS only, Zod-validated
    (DEC-007, Appendix B).
 4. **TB4:** App ↔ map SDK / tile provider *(future)* — third-party SDK code inside the app;
@@ -68,33 +80,48 @@ STRIDE = Spoofing, Tampering, Repudiation, Information disclosure, Denial of ser
 Elevation of privilege. "Mitigation today" is verified in this repository; "Required action"
 is work for the phase named.
 
-### EP-1 — Journey search input (station text incl. Cyrillic/Latin/mixed, date, time, limit) *(Phase 3)*
+### EP-1 — Text search input (station search live since Wave 3; journey search *Phase 3*)
+
+Station search is implemented (`src/features/stations/model/stationSearch.ts` + `normalize.ts`,
+UI in `StationsView.tsx`): normalisation is pure string operations (NFD, diacritic strip,
+deterministic Cyrillic→Latin transliteration); **no `RegExp` is ever built from user input**
+(no ReDoS surface), no I/O, no logging. Journey search (date/time/limit) remains future.
 
 | STRIDE | Threat | Mitigation today | Required action |
 |--------|--------|------------------|-----------------|
 | S | Attacker-supplied station names/times rendered as if provider-authoritative | Provenance on every record (`src/types/provenance.ts`); UI must render labels (DEC-006) | Phase 3/4 tests: provenance label always visible; `demo`-only mock enforced by test (DEC-002) |
-| T | Malformed/oversized input reaches a future provider or breaks validation | Types define bounded fields (`src/types/journey.ts:27-40`); Zod boundary specified (DEC-007 App. B) | Implement Zod + length/format limits at the boundary in Phase 4; never trust form state alone |
-| R | Search requests are not user-actionable denials ("something went wrong") | `ProviderError.code` → localised message contract (`src/types/errors.ts:76-78`) | Phase 4 UI mapping test for every code |
-| I | Search terms (travel intent) leak into logs/crash reports | No logging exists anywhere in `src/` (verified: zero `console.*` calls) | Ban logging of `JourneySearch`, station text and `GeoPoint` in the logging policy when logging is added (checklist §14 "privacy test") |
+| T | Malformed/oversized input reaches a future provider or breaks validation | Types define bounded fields (`src/types/journey.ts:27-40`); Zod boundary specified (DEC-007 App. B) and **implemented** for provider payloads (`src/services/api/parsePayload.ts`); search query is length-unbounded but processed as plain substrings | Implement Zod + length/format limits at the boundary in Phase 4; never trust form state alone; consider `maxLength` on the search `TextInput` when a large licensed directory replaces the 20-station demo set (review W3-L6) |
+| R | Search requests are not user-actionable denials ("something went wrong") | `ProviderError.code` → localised message contract (`src/types/errors.ts:76-78`); `ErrorState` renders only `ERROR_MESSAGE_KEYS[code]`, never raw error text (`src/components/ErrorState.tsx`) | Phase 4 UI mapping test for every code |
+| I | Search terms (travel intent) leak into logs/crash reports | No logging exists anywhere in `src/` (verified again 2026-10-24: zero `console.*` calls) | Ban logging of `JourneySearch`, station text and `GeoPoint` in the logging policy when logging is added (checklist §14 "privacy test") |
 | D | Huge result sets / repeated searches exhaust device or future API | `limit` on search (`src/types/journey.ts:39`); retry policy bounded, jittered (`src/services/common/RequestOptions.ts:46-52`) | Future API needs rate limits (checklist §5/§11) |
-| E | A search response drives navigation/action without validation | — | Zod parse before mapping; unknown fields never passed to UI (DEC-007 App. B.3) |
+| E | A search response drives navigation/action without validation | — | Zod parse before mapping; unknown fields never passed to UI (DEC-007 App. B.3) — **implemented** (`parseExternalPayload`, schemas strip unknown fields) |
 
-### EP-2 — Local persistence (favourites, recent searches, onboarding completion, language; later cache) *(Phase 5)*
+**Demo dataset note (Wave 3):** the stations list is bundled synthetic data
+(`src/features/stations/data/demoStations.ts`) — every name carries a "Демо/Demo" marker and
+coordinates are invented. It contains no personal data (review W3-§5). Abuse case: see AC-14.
+
+### EP-2 — Local persistence (onboarding completion + language LIVE; favourites, recent searches, later cache *(future/Phase 5)*)
+
+**Live since Wave 3:** exactly two keys via `src/services/storage/settingsStorage.ts` —
+`settings.language` (bg/en) and `settings.onboardingCompleted` ('true'). Nothing else is
+written to storage anywhere in `src/` (verified 2026-10-24). Features must not touch
+AsyncStorage directly (module comment, enforced by review).
 
 | STRIDE | Threat | Mitigation today | Required action |
 |--------|--------|------------------|-----------------|
-| S/T | Tampered storage on a rooted device injects data or old schema | Re-validation on read mandated (`src/types/favourites.ts:118-123`); versioned `LocalStoreSnapshot` | Phase 5: Zod validate on read, per-field reset + visible notice on corruption (DEC-007 App. B.4) |
-| R | User cannot remove their travel history | Policy spec: user-deletable, capped (20 recent / 100 favourites / 90-day TTL — `src/types/favourites.ts:174-178`) | Phase 5: "clear saved items" with confirmation (plan.md §8); test deletion actually deletes |
-| I | Travel intent readable via backup/other apps | AsyncStorage is app-sandboxed plaintext | Accept for non-secret data; document in privacy notice. Tokens (future) MUST go to SecureStore, never AsyncStorage (checklist §3) |
-| D | Corrupt storage crashes the app | — | Graceful reset path (above); no crash on old schema (DEC-007 App. B.4) |
+| S/T | Tampered storage on a rooted device injects data or old schema | Re-validation on read mandated (`src/types/favourites.ts:118-123`); versioned `LocalStoreSnapshot`; **today's two keys are re-narrowed on read** — language via `normalizeLocale` allow-list (`catalog.ts:61-65`), onboarding flag via `value === 'true'`; any corruption falls back to safe defaults and never crashes (`settingsStorage.ts:50-57`) | Phase 5: Zod validate on read for structured records, per-field reset + visible notice on corruption (DEC-007 App. B.4) |
+| S | Forcing `settings.onboardingCompleted` skips the guide (or clears it re-shows it) | Impact is cosmetic only — the guide carries no consent or permission (see EP-6-E); replayable at `/onboarding` | None; accept and document |
+| R | User cannot remove their travel history | Policy spec: user-deletable, capped (20 recent / 100 favourites / 90-day TTL — `src/types/favourites.ts:174-178`); **nothing to delete today** beyond the two settings keys (language switch + onboarding flag) | Phase 5: "clear saved items" with confirmation (plan.md §8); test deletion actually deletes |
+| I | Language choice readable via backup/other apps | AsyncStorage is app-sandboxed plaintext; the value is `bg`/`en` — non-sensitive | Accept for non-secret data; document in privacy notice. Tokens (future) MUST go to SecureStore, never AsyncStorage (checklist §3) |
+| D | Corrupt storage crashes the app | Read failures return the fallback (tested in `tests/storage/settingsStorage.test.ts`); write failure is caught in the i18n layer (`runtime.ts:79-82`) and does not revert the in-memory switch | Extend the same pattern to Phase 5 records |
 | E | — | — | — |
 
 ### EP-3 — Deep links (`bdztrain://`, future checkout return/cancel URLs)
 
 | STRIDE | Threat | Mitigation today | Required action |
 |--------|--------|------------------|-----------------|
-| S | Rogue app/website invokes `bdztrain://` with crafted parameters (e.g. fake "payment success") | Scheme registered (`app.json:7`); no deep-link handler consumes data yet | When ticketing exists: a deep-link return is **never** proof of payment — state re-fetched via `getOrder` (DEC-008 rule 1, `TicketingProvider` note). Validate every deep-link parameter (ids opaque, length-bounded) |
-| T | Path/route manipulation to reach flag-gated screens | Flag gates are not implemented yet | Phase 2/6: gated routes unreachable in release builds, tested |
+| S | Rogue app/website invokes `bdztrain://` with crafted parameters (e.g. fake "payment success") | Scheme registered (`app.json:7`); **verified 2026-10-24: no route reads deep-link parameters** — no `useLocalSearchParams`/`route.params` anywhere in `src/`; route files navigate to fixed paths only | When ticketing exists: a deep-link return is **never** proof of payment — state re-fetched via `getOrder` (DEC-008 rule 1, `TicketingProvider` note). Validate every deep-link parameter (ids opaque, length-bounded) |
+| T | Path/route manipulation to reach flag-gated screens | Route set is fixed (`/`, `/search`, `/map`, `/trips`, `/settings`, `/onboarding`); no flag-gated routes exist yet | Phase 2/6: gated routes unreachable in release builds, tested |
 | I | Return URLs leak order ids into the OS/browser history | `returnUrl`/`cancelUrl` are app deep links by spec (`src/services/ticketing/TicketingProvider.ts:360-372`) | Keep order ids opaque; no PII in URLs ever |
 | D/E | — | — | — |
 
@@ -113,23 +140,42 @@ is work for the phase named.
 
 | STRIDE | Threat | Mitigation today | Required action |
 |--------|--------|------------------|-----------------|
-| S | Typosquatted dependency | All 24 direct deps verified to exist and be the intended packages (2026-10-22, incl. the non-obvious `test-renderer`, which is RNTL 14's declared peer dep); all lockfile entries resolve from `registry.npmjs.org` with integrity hashes | Keep the per-package typosquat check for every added dependency (checklist §5) |
+| S | Typosquatted dependency | All 24 direct deps verified to exist and be the intended packages (2026-10-22, incl. the non-obvious `test-renderer`, which is RNTL 14's declared peer dep); **Wave 3 additions re-verified 2026-10-24:** `zod@4.6.7` (MIT, `github.com/colinhacks/zod`) and `@react-native-async-storage/async-storage@2.2.0` (MIT, `github.com/react-native-async-storage/async-storage`) — exact names, official repos, the SDK 58 line (`expo/bundledNativeModules.json` pins 2.2.0). All lockfile entries resolve from `registry.npmjs.org` with integrity hashes | Keep the per-package typosquat check for every added dependency (checklist §5) |
 | T | Lockfile tampering / malicious install scripts | Lockfile committed; npm 11 blocks install scripts by default (`README.md:180-182`) | Pin CI actions to commit SHAs when a human owns CI (currently tag refs); review install-script allowlist when one is created |
 | R | Nobody can tell what a CI run did | CI runs are UNVERIFIED and honestly labelled (`README.md:18-20`) | Human must observe the first real run; branch protection + required checks (checklist §15) |
-| I | Secret in repo/Git history/bundle | Full-history scan found none (see `docs/security-privacy-review-2026-10-22.md` §1); `.gitignore` covers `.env` + signing material | Close the remaining `.gitignore` gaps (see review F-04); secret-scanning in CI (gitleaks or GitHub secret scanning) before launch |
-| D | Compromised/vulnerable package breaks CI or dev machines | `npm audit` job exists (advisory); 48 known findings triaged in the review doc | Decide with the security owner when `dependency-audit` becomes required (review F-02) |
-| E | CI token over-permissioned | Workflow quality jobs use no secrets | Add explicit `permissions: contents: read` (review F-03); release credentials only in protected CI secrets (checklist §15) |
+| I | Secret in repo/Git history/bundle | Full-history scan found none (see `docs/security-privacy-review-2026-10-22.md` §1); re-run on the Wave 3 tree + all commits 2026-10-24: still none; `.gitignore`/`.dockerignore` cover `.env` + signing material incl. the F-04 additions | Secret-scanning in CI (gitleaks or GitHub secret scanning) before launch |
+| D | Compromised/vulnerable package breaks CI or dev machines | `npm audit` job exists (advisory); baseline CHANGED 2026-10-24: **5 findings (all high) from 2 advisories** — `braces` and `sprintf-js` advisories were **withdrawn** upstream (GHSA-vfj7-8cjw-p6xm withdrawn 2026-10-23; GHSA-hp3w-g68c-fv3c withdrawn 2026-10-22); `node-forge` (GHSA-86w9-cpqp-85rv) remains unpatched; **new** `zod` advisory GHSA-mrhx-c7xc-m3w5 (CVE-2023-54404, unbounded-array memory exhaustion) affects `zod <4.6.6` — the app's direct `zod@4.6.7` is **patched**; the vulnerable copy is `@expo/cli`'s nested `zod@3.25.76` (build tooling only, not in the app bundle) | Re-baseline the audit gate (review F-02): the counts moved, so an audit-diff gate must re-baseline now; decide with the security owner when `dependency-audit` becomes required |
+| E | CI token over-permissioned | Workflow quality jobs use no secrets; **F-03 fixed** — `permissions: contents: read` at workflow level (`.github/workflows/ci.yml:16-17`, verified 2026-10-24) | Release credentials only in protected CI secrets (checklist §15); grant per-job permissions when release jobs arrive |
 
-### EP-6 — Location and map *(future, plan.md 17.5, DEC-012 open)*
+### EP-6 — Location and map *(nearby flow SHIPPED as a shell 2026-10-23; no location module yet; map SDK DEC-012 open)*
+
+**Verified 2026-10-24 — the four privacy questions for Wave 3:**
+
+1. **No location permission request exists anywhere except the user-initiated nearby flow.**
+   No location module is installed (`expo-location` is not in `package.json`); the default
+   `LocationPort` is a stub returning `'unavailable'`
+   (`src/features/stations/StationsScreen.tsx:40-47`). When a real port is wired, the contract
+   (`src/features/stations/types.ts:43-57`) and tests (`tests/stations/nearby-stations.test.tsx`)
+   already enforce: permission requested **only** from a tap on the nearby button, **never at
+   mount, never on search**, one request per tap (double-tap guarded).
+2. **No position is stored or logged.** The raw `GeoPoint` is function-local in
+   `runNearbyStationsFlow` (`model/nearby.ts:159-171`), converted to derived distances and
+   dropped; `NearbyViewState` has no position field and no history array (state is replaced
+   per run, `nearby.ts:53-77`); no persistence module is imported by the model; no
+   `console.*` exists in `src/`. A test asserts the raw position never enters state or
+   actions (`nearby-stations.test.tsx:248-275`).
+3. **No analytics** — flag `analytics` OFF and zero analytics code in the tree (verified).
+4. **Zero network calls** — nothing in `src/`/`tests/` opens a socket or URL (verified; see
+   the scope paragraph). Location data therefore cannot leave the device today.
 
 | STRIDE | Threat | Mitigation today | Required action |
 |--------|--------|------------------|-----------------|
-| S | Map line/marker read as an operational route or live service | Rule stated in plan.md 17.5 and checklist §9 | UI disclaimer + provenance on station data; test |
-| T | Map SDK or tile cache tampering | Nothing integrated | SDK chosen only after licence/privacy review (DEC-012); tile caching only if permitted |
-| I | Location history leaks to logs, crash reporting or the future backend | Nothing collects location today (`StationQuery.near` optional — `src/types/station.ts:257-258`) | Foreground-only permission, user-initiated "nearby stations" only; no location in logs (checklist §6); never store more than the minimum; document retention |
+| S | Map line/marker read as an operational route or live service | Rule stated in plan.md 17.5 and checklist §9; `MapPlaceholder` carries the disclaimer + demo notice (`src/features/stations/components/MapPlaceholder.tsx`) | UI disclaimer + provenance on station data; test (map SDK integration, DEC-012) |
+| T | Map SDK or tile cache tampering | Nothing integrated (placeholder only) | SDK chosen only after licence/privacy review (DEC-012); tile caching only if permitted |
+| I | Location history leaks to logs, crash reporting or the future backend | See the four verified points above | When `expo-location` (or similar) lands: keep the `LocationPort` contract exactly (foreground-only, one-shot); add a privacy test asserting no GeoPoint in logs (checklist §6/§14); never store more than the minimum; document retention |
 | I | Map SDK key abused for quota/cost | Key is public by design (`.env.example:18-21`) | Restrict key by bundle id/package name at the provider (plan.md 17.5); monitor quota |
-| D | Map tiles unusable on low-end devices/offline | — | List alternative always available, works without permission (checklist §9) |
-| E | Permission requested coercively at onboarding | Onboarding rules forbid it (plan.md 17.7: permission only at point of use) | Enforce in onboarding implementation + test (checklist §10 "No permission prompts during onboarding") |
+| D | Map tiles unusable on low-end devices/offline | — | List alternative always available, works without permission (checklist §9) — the list IS the default (`StationsView` starts in list mode) |
+| E | Permission requested coercively at onboarding | Onboarding rules forbid it and the implementation keeps them: no permission/consent code exists in `src/features/onboarding/` (verified 2026-10-24) | Keep checklist §10 "No permission prompts during onboarding" asserted by test (exists: `tests/mobile-ui/onboarding.test.tsx`) |
 
 ### EP-7 — Accounts *(future, plan.md 17.2; flag `accounts` OFF)*
 
@@ -182,13 +228,33 @@ is work for the phase named.
   Counter: A8 — brand/legal controls, security.txt/disclosure channel (checklist §5), store
   takedown process (needs an owner).
 
-**Map / location (future)**
+**Map / location (nearby flow live as a shell)**
 - AC-11: Location history reconstructed from logs/crash reports. Counter: logging ban on
-  `GeoPoint`/location (extend checklist §14 privacy test to assert it).
+  `GeoPoint`/location (extend checklist §14 privacy test to assert it); today no logging and
+  no crash reporting exist at all.
 - AC-12: Covert always-on tracking dressed up as "nearby stations". Counter: foreground-only,
-  point-of-use permission (plan.md 17.5), store disclosure.
+  point-of-use permission (plan.md 17.5), store disclosure; the one-shot contract is enforced
+  by `LocationPort` + tests before any real module is wired.
 - AC-13: Map-key scraping for quota theft/cost. Counter: platform-restricted key + quotas +
   cost alerts (checklist §11).
+
+**Stations / onboarding / settings (new with Wave 3)**
+- AC-14: Third party screenshots *demo* station cards and presents them as a real BDZ station
+  directory. Counter: every name carries a "Демо/Demo" marker, every card renders a provenance
+  badge + demo notice, and the map area states the SDK is pending (rule 6; tests in
+  `tests/stations/` and `tests/mobile-ui/provenance.test.tsx`).
+- AC-15: A "helpful" change wires the stations screen to a community GTFS mirror or a scraped
+  station list. Counter: DEC-002/DEC-013 prohibit unofficial feeds; `DEMO_STATIONS` is
+  bundled and explicitly synthetic (`docs/station-dataset-licensing.md` tracks the licensing
+  route); code review must reject any station dataset without a licence record.
+- AC-16: Search input abused to burn CPU/battery on a large future directory (pasted
+  megabyte-long queries, token floods). Counter: pure linear substring matching today;
+  add `maxLength` on the input and a `limit` on results when the licensed directory lands
+  (review W3-L6).
+- AC-17: A future deep link pre-fills the station search or a journey query with hostile
+  text, hoping it is logged or rendered as markup. Counter: no route reads parameters today;
+  RN `Text` renders plain text (no WebView/HTML anywhere in the tree — verified); keep it
+  that way and never log the query.
 
 ## 6. Review and maintenance rules
 
