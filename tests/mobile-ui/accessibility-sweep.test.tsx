@@ -19,7 +19,11 @@
  *                    (Loader, ListSkeleton);
  *       - errors / offline / confirmations → `accessibilityRole="alert"` +
  *                    a name (StatusMessage alert family, OfflineBanner,
- *                    TextInput inline error, ConfirmDialog).
+ *                    TextInput inline error, ConfirmDialog);
+ *     and every role-carrying container is EXPOSED (`accessible` — set by
+ *     all announcing components; a bare Text is exposed by default). A role
+ *     on a non-exposed container announces nothing and is invisible to
+ *     `*ByRole` queries.
  *
  * On failure the assertion prints the full list of offenders (surface,
  * element, and what is missing) — not just a count.
@@ -109,6 +113,17 @@ function accessibleName(node: TestInstance): string {
   return renderedText(node);
 }
 
+/**
+ * Is the node part of the accessibility tree at all? The design system
+ * exposes every announcing container explicitly (`accessible`) — a bare
+ * Text node is exposed by default. A container that carries a role but is
+ * not exposed is announced by nothing (and is invisible to `*ByRole`
+ * queries).
+ */
+function isExposed(node: TestInstance): boolean {
+  return node.props.accessible === true || node.type === 'Text';
+}
+
 function describeNode(node: TestInstance): string {
   const testID = node.props.testID;
   return `${node.type}${typeof testID === 'string' ? ` (testID=${testID})` : ''}`;
@@ -132,7 +147,10 @@ function audit(root: TestInstance, surface: string): string[] {
     }
 
     // Design-system role announcements (src/components headers):
-    // loading = progressbar + busy; error-like states = alert.
+    // loading = progressbar + busy; error-like states = alert. Both require
+    // an EXPOSED container — every announcing component in src/components
+    // sets `accessible`; a role on a non-exposed container is announced by
+    // nothing (and is invisible to *ByRole queries).
     if (role === 'progressbar') {
       if (name.length === 0) {
         offenders.push(
@@ -144,19 +162,21 @@ function audit(root: TestInstance, surface: string): string[] {
           `${surface}: ${describeNode(node)} announces progressbar without accessibilityState.busy`,
         );
       }
+      if (!isExposed(node)) {
+        offenders.push(
+          `${surface}: ${describeNode(node)} announces progressbar but is not exposed to assistive tech`,
+        );
+      }
     }
     if (role === 'alert') {
-      // A name is required; `accessible` defaults to exposed for text nodes
-      // (TextInput's inline error is a plain Text), so only an EXPLICIT
-      // `accessible={false}` is an offender.
       if (name.length === 0) {
         offenders.push(
           `${surface}: ${describeNode(node)} announces alert without a name`,
         );
       }
-      if (node.props.accessible === false) {
+      if (!isExposed(node)) {
         offenders.push(
-          `${surface}: ${describeNode(node)} announces alert but is hidden from assistive tech`,
+          `${surface}: ${describeNode(node)} announces alert but is not exposed to assistive tech`,
         );
       }
     }
