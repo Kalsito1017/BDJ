@@ -42,7 +42,10 @@
  * (navigation-shell.test.tsx covers the shell).
  */
 
-import { fireEvent, render, renderRouter, screen } from 'expo-router/testing-library';
+import { render } from '@testing-library/react-native';
+import { fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+// Note: `render` (component-level) is not re-exported as a value by
+// expo-router/testing-library — it comes from RNTL itself.
 
 import { ListSkeleton, Loader, OfflineBanner } from '../../src/components';
 import { addDaysIso, systemTodayIso } from '../../src/features/journey-search/validation';
@@ -60,10 +63,9 @@ jest.mock(
 // layout gives no injection point) so favourite/recent rows render without
 // touching AsyncStorage (see tests/smoke/journey-flow-e2e.test.tsx).
 jest.mock('../../src/services/storage/localStore', () => {
-  const actual =
-    jest.requireActual<typeof import('../../src/services/storage/localStore')>(
-      '../../src/services/storage/localStore',
-    );
+  const actual = jest.requireActual<
+    typeof import('../../src/services/storage/localStore')
+  >('../../src/services/storage/localStore');
   return { ...actual, localStore: actual.createMemoryLocalStore() };
 });
 
@@ -133,7 +135,9 @@ function audit(root: TestInstance, surface: string): string[] {
     // loading = progressbar + busy; error-like states = alert.
     if (role === 'progressbar') {
       if (name.length === 0) {
-        offenders.push(`${surface}: ${describeNode(node)} announces progressbar without a name`);
+        offenders.push(
+          `${surface}: ${describeNode(node)} announces progressbar without a name`,
+        );
       }
       if (node.props.accessibilityState?.busy !== true) {
         offenders.push(
@@ -146,7 +150,9 @@ function audit(root: TestInstance, surface: string): string[] {
       // (TextInput's inline error is a plain Text), so only an EXPLICIT
       // `accessible={false}` is an offender.
       if (name.length === 0) {
-        offenders.push(`${surface}: ${describeNode(node)} announces alert without a name`);
+        offenders.push(
+          `${surface}: ${describeNode(node)} announces alert without a name`,
+        );
       }
       if (node.props.accessible === false) {
         offenders.push(
@@ -253,7 +259,11 @@ describe('accessibility sweep — state surfaces announce their roles', () => {
     await screen.findByTestId('journey-search-form-submit', {}, WAIT);
     await fireEvent.press(screen.getByTestId('journey-search-form-submit'));
 
-    const fromError = await screen.findByTestId('journey-search-form-from-error', {}, WAIT);
+    const fromError = await screen.findByTestId(
+      'journey-search-form-from-error',
+      {},
+      WAIT,
+    );
     expect(audit(fromError, 'form validation error')).toEqual([]);
     expect(fromError.props.accessibilityRole).toBe('alert');
   });
@@ -270,12 +280,18 @@ describe('accessibility sweep — state surfaces announce their roles', () => {
     );
     await fireEvent.press(deleteButton);
 
-    const dialog = await screen.findByTestId('screen-search-favourites-remove-confirm', {}, WAIT);
+    const dialog = await screen.findByTestId(
+      'screen-search-favourites-remove-confirm',
+      {},
+      WAIT,
+    );
     expect(audit(dialog, 'confirmation dialog')).toEqual([]);
     expect(dialog.props.accessibilityRole).toBe('alert');
 
     // Leave the fixture intact: cancel the dialog.
-    await fireEvent.press(screen.getByTestId('screen-search-favourites-remove-confirm-cancel'));
+    await fireEvent.press(
+      screen.getByTestId('screen-search-favourites-remove-confirm-cancel'),
+    );
   });
 
   it('loading indicators announce progressbar + busy + name (design-system contract)', async () => {
@@ -296,7 +312,9 @@ describe('accessibility sweep — state surfaces announce their roles', () => {
   });
 
   it('offline banner announces alert + name (design-system contract)', async () => {
-    await render(<OfflineBanner onRetry={() => undefined} testID="a11y-sweep-offline" visible />);
+    await render(
+      <OfflineBanner onRetry={() => undefined} testID="a11y-sweep-offline" visible />,
+    );
 
     const node = screen.getByTestId('a11y-sweep-offline');
     expect(node.props.accessibilityRole).toBe('alert');

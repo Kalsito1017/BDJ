@@ -51,10 +51,9 @@ jest.mock(
 
 // Memory-store seam: replace ONLY the app-wide singleton export (see header).
 jest.mock('../../src/services/storage/localStore', () => {
-  const actual =
-    jest.requireActual<typeof import('../../src/services/storage/localStore')>(
-      '../../src/services/storage/localStore',
-    );
+  const actual = jest.requireActual<
+    typeof import('../../src/services/storage/localStore')
+  >('../../src/services/storage/localStore');
   return { ...actual, localStore: actual.createMemoryLocalStore() };
 });
 
@@ -103,12 +102,17 @@ describe('journey flow end-to-end (demo data only)', () => {
     );
 
     /* 2. Travel date + submit. */
-    await fireEvent.changeText(screen.getByTestId('journey-search-form-date'), VALID_DATE);
+    await fireEvent.changeText(
+      screen.getByTestId('journey-search-form-date'),
+      VALID_DATE,
+    );
     await fireEvent.press(screen.getByTestId('journey-search-form-submit'));
 
     /* 3. Results: demo journeys, rule-6 demo labelling. */
     expect(await screen.findByTestId('screen-search-results', {}, WAIT)).toBeTruthy();
-    expect(await screen.findByTestId('screen-search-results-card-0', {}, WAIT)).toBeTruthy();
+    expect(
+      await screen.findByTestId('screen-search-results-card-0', {}, WAIT),
+    ).toBeTruthy();
     expect(screen.getByTestId('screen-search-results-card-1')).toBeTruthy();
     expect(screen.getAllByText(t('provenance.demo')).length).toBeGreaterThan(0);
     expect(screen.getByText(t('provenance.demo_desc'))).toBeTruthy();
@@ -116,11 +120,15 @@ describe('journey flow end-to-end (demo data only)', () => {
     /* 4. Details: the legs are visible and still demo-labelled. */
     await fireEvent.press(screen.getByTestId('screen-search-results-card-0-details'));
     expect(await screen.findByTestId('screen-journey-details', {}, WAIT)).toBeTruthy();
-    expect(await screen.findByTestId('screen-journey-details-leg-0', {}, WAIT)).toBeTruthy();
+    expect(
+      await screen.findByTestId('screen-journey-details-leg-0', {}, WAIT),
+    ).toBeTruthy();
     expect(screen.getByText(t('provenance.demo_desc'))).toBeTruthy();
 
     /* 5. Save the route from details (saved state + honesty notice). */
-    expect(await screen.findByTestId('screen-journey-details-save-route-save', {}, WAIT)).toBeTruthy();
+    expect(
+      await screen.findByTestId('screen-journey-details-save-route-save', {}, WAIT),
+    ).toBeTruthy();
     await fireEvent.press(screen.getByTestId('screen-journey-details-save-route-save'));
     expect(
       await screen.findByTestId('screen-journey-details-save-route-saved', {}, WAIT),
@@ -178,7 +186,9 @@ describe('journey flow end-to-end (demo data only)', () => {
     /* 8. Re-run the saved route from favourites: lands on results again. */
     await fireEvent.press(favouriteRow);
     expect(await screen.findByTestId('screen-search-results', {}, WAIT)).toBeTruthy();
-    expect(await screen.findByTestId('screen-search-results-card-0', {}, WAIT)).toBeTruthy();
+    expect(
+      await screen.findByTestId('screen-search-results-card-0', {}, WAIT),
+    ).toBeTruthy();
     expect(screen.getAllByText(t('provenance.demo')).length).toBeGreaterThan(0);
     expect(screen.getByText(t('provenance.demo_desc'))).toBeTruthy();
   });
