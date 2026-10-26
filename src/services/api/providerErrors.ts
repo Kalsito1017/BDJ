@@ -193,17 +193,34 @@ export function providerErrorFromZod(
 }
 
 /**
+ * Diagnostic key-name bound (DEC-019 W3-L2): identifier-shaped key names can
+ * still be data (e.g. a username in a keyed payload), so every name is
+ * truncated to a short prefix — enough to identify the field, far too short
+ * to carry meaningful payload content.
+ */
+export const SAFE_PAYLOAD_KEY_MAX_LENGTH = 24;
+
+function truncateDiagnosticKey(key: string): string {
+  return key.length <= SAFE_PAYLOAD_KEY_MAX_LENGTH
+    ? key
+    : `${key.slice(0, SAFE_PAYLOAD_KEY_MAX_LENGTH)}…`;
+}
+
+/**
  * Type/shape summary of an untrusted payload for diagnostics. Values are
  * NEVER included — only kinds, lengths and identifier-shaped key names
- * (anything that could be personal data, e.g. an object keyed by e-mail,
- * is summarised as a count only).
+ * (truncated to `SAFE_PAYLOAD_KEY_MAX_LENGTH` — W3-L2; anything that could be
+ * personal data, e.g. an object keyed by e-mail, is summarised as a count
+ * only).
  */
 export function safePayloadSummary(value: unknown): string {
   if (value === null) return 'null';
   if (Array.isArray(value)) return `array(length=${value.length})`;
   if (typeof value === 'object') {
     const keys = Object.keys(value as Record<string, unknown>);
-    const safeKeys = keys.filter((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key));
+    const safeKeys = keys
+      .filter((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
+      .map(truncateDiagnosticKey);
     return `object(keys=${keys.length}:[${safeKeys.slice(0, 10).join(',')}])`;
   }
   return typeof value;

@@ -17,17 +17,21 @@
  * PARALLEL-WAVE CAVEAT (DEC-016 §3): the Phase 3/4 journey-flow features
  * propose their keys in per-feature contract files
  * (src/features/{journey-search,journey-results,journey-details,station-picker}/
- * translationKeys.ts) and the LEAD merges the locale values. Until a key is
- * merged it legitimately renders as its key. `PENDING_LEAD_MERGE` below is
- * DERIVED (contract keys that are still missing from both catalogs) — it is
- * not a hand-maintained list, so it cannot go stale the way the Phase 2
- * `PENDING_KEYS` list did (DEC-019 L1): once the lead merges the values it
- * computes to an empty set and the guard is fully strict again, with no
- * clean-up needed. A raw key OUTSIDE the contract files still fails hard —
- * that is the H1 regression class.
+ * translationKeys.ts) and the LEAD merges the locale values, as do the
+ * saved-items store notices (src/features/favourites/translationKeys.ts —
+ * the `notices.*` banner copy). Until a key is merged it legitimately renders
+ * as its key. `PENDING_LEAD_MERGE` below is DERIVED (contract keys that are
+ * still missing from both catalogs) — it is not a hand-maintained list, so it
+ * cannot go stale the way the Phase 2 `PENDING_KEYS` list did (DEC-019 L1):
+ * once the lead merges the values it computes to an empty set and the guard
+ * is fully strict again, with no clean-up needed. A raw key OUTSIDE the
+ * contract files still fails hard — that is the H1 regression class.
  */
 
-import { render, screen } from '@testing-library/react-native';
+import { render as renderRntl, screen } from '@testing-library/react-native';
+import type { ReactNode } from 'react';
+
+import { AppDataProvider } from '../../src/hooks';
 
 import MapScreen from '../../src/app/(tabs)/map';
 import SearchScreen from '../../src/app/(tabs)/search';
@@ -43,6 +47,10 @@ import {
   JOURNEY_KEYS,
   JOURNEY_RESULTS_KEYS,
 } from '../../src/features/journey-results/translationKeys';
+import {
+  NOTICE_KEYS,
+  NOTICE_REASON_KEYS,
+} from '../../src/features/favourites/translationKeys';
 import { StationPickerView } from '../../src/features/station-picker/StationPickerView';
 import { STATION_PICKER_KEYS } from '../../src/features/station-picker/translationKeys';
 import {
@@ -60,13 +68,15 @@ const LOCALES: readonly Locale[] = ['bg', 'en'];
 /** Flat dot-separated key shape (DEC-016 §1) — the raw-key fallback look. */
 const RAW_KEY_PATTERN = /^[a-z0-9_]+(?:\.[a-z0-9_]+)+$/;
 
-/** Every key the Phase 3/4 journey-flow contract files declare. */
+/** Every key the Phase 3/4 journey-flow + saved-items contract files declare. */
 const CONTRACT_KEYS: readonly string[] = [
   ...Object.values(JOURNEY_SEARCH_KEYS),
   ...Object.values(JOURNEY_KEYS),
   ...Object.values(JOURNEY_RESULTS_KEYS),
   ...Object.values(JOURNEY_DETAILS_KEYS),
   ...Object.values(STATION_PICKER_KEYS),
+  ...Object.values(NOTICE_KEYS),
+  ...Object.values(NOTICE_REASON_KEYS),
 ];
 
 /**
@@ -77,12 +87,13 @@ const PENDING_LEAD_MERGE: readonly string[] = CONTRACT_KEYS.filter(
   (key) => !(key in catalogs.bg) && !(key in catalogs.en),
 );
 
-/** Namespaces the journey-flow contracts may own (anti-creep). */
+/** Namespaces the journey-flow + saved-items contracts may own (anti-creep). */
 const PENDING_NAMESPACE_ALLOW_LIST: readonly string[] = [
   'journey_search.',
   'journey.',
   'journey_results.',
   'journey_details.',
+  'notices.',
 ];
 const PENDING_KEY_ALLOW_LIST: readonly string[] = [
   'common.unknown',
@@ -98,6 +109,10 @@ function collectRenderedText(node: RenderedNode | string | null): string[] {
   if (typeof node === 'string') return [node];
   return (node.children ?? []).flatMap(collectRenderedText);
 }
+
+/** Render inside AppDataProvider: screens use the hooks/store context (Phase 5). */
+const render = (node: ReactNode): ReturnType<typeof renderRntl> =>
+  renderRntl(<AppDataProvider>{node}</AppDataProvider>);
 
 function renderedLines(): string[] {
   return collectRenderedText(screen.toJSON());
@@ -256,7 +271,7 @@ describe.each(LOCALES)('i18n integrity in the %s locale', (locale) => {
 });
 
 describe('pending lead locale merge (DEC-016 §3)', () => {
-  it('only allows pending keys from the journey-flow contracts', () => {
+  it('only allows pending keys from the journey-flow and notices contracts', () => {
     const outOfScope = PENDING_LEAD_MERGE.filter(
       (key) =>
         !PENDING_NAMESPACE_ALLOW_LIST.some((ns) => key.startsWith(ns)) &&

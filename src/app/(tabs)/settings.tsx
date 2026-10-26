@@ -1,12 +1,12 @@
 /**
- * Settings tab (placeholder shell).
+ * Settings tab.
  *
  * Contains the Help entry that replays the first-launch guide
- * (plan.md 17.7 "Let users reopen the guide from Settings -> Help") and a
- * language entry placeholder — the language switch itself is owned by the
- * i18n workstream (src/i18n).
+ * (plan.md 17.7 "Let users reopen the guide from Settings -> Help") and the
+ * language switch (plan.md 17.6 / checklist §8: device-locale detection on
+ * first launch, user choice persisted via `settingsStorage`).
  */
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { Button, Card, PlaceholderScreen } from '../../components';
@@ -19,7 +19,7 @@ export interface SettingsScreenProps {
 }
 
 export default function SettingsScreen({ onReplayOnboarding }: SettingsScreenProps) {
-  const { t } = useTranslation();
+  const { t, locale, setLocale } = useTranslation();
   const theme = useTheme();
   const { colors, spacing, typography: type } = theme;
 
@@ -34,9 +34,25 @@ export default function SettingsScreen({ onReplayOnboarding }: SettingsScreenPro
         >
           {t('settings.language')}
         </Text>
-        <Text style={[type.body, { color: colors.textSecondary }]}>
-          {t('scaffold.coming_soon')}
-        </Text>
+        {/* Language names are shown in their own language (parity allow-list). */}
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <Button
+            accessibilityLabel={t('settings.language_option_bg')}
+            accessibilityState={{ selected: locale === 'bg' }}
+            label={t('settings.language_option_bg')}
+            onPress={() => setLocale('bg')}
+            testID="screen-settings-language-bg"
+            variant={locale === 'bg' ? 'primary' : 'secondary'}
+          />
+          <Button
+            accessibilityLabel={t('settings.language_option_en')}
+            accessibilityState={{ selected: locale === 'en' }}
+            label={t('settings.language_option_en')}
+            onPress={() => setLocale('en')}
+            testID="screen-settings-language-en"
+            variant={locale === 'en' ? 'primary' : 'secondary'}
+          />
+        </View>
       </Card>
       <Card testID="screen-settings-help">
         <Text

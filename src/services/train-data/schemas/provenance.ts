@@ -41,7 +41,7 @@ export const RealTimeProvenanceSchema = z.object({
   kind: z.literal('real-time'),
   ...ProvenanceBaseShape,
   observedAt: IsoDateTimeSchema,
-  sourceId: z.string().min(1),
+  sourceId: z.string().min(1).max(128),
 });
 
 /** Discriminated on `kind` — unknown kinds reject as `invalid_response`. */

@@ -43,6 +43,12 @@ export const JOURNEY_RESULTS_KEYS = {
   /** "Results loaded at {time}" — query cache freshness, NOT provenance. */
   fetchedAt: 'journey_results.fetched_at',
   detailsCta: 'journey_results.details_cta',
+  /**
+   * NEW (Phase 5): "may be out of date" hint shown when the query reports
+   * `isStale`. Supersedes the unused `journeys.stale_hint` proposal by
+   * staying inside the journey surface's single vocabulary (DEC-019).
+   */
+  staleHint: 'journey_results.stale_hint',
 } as const;
 
 export type JourneyKey = (typeof JOURNEY_KEYS)[keyof typeof JOURNEY_KEYS];

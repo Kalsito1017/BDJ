@@ -3,21 +3,27 @@
 Cross-platform (iOS + Android) mobile app for passengers of Bulgarian State
 Railways (BDZ), built with React Native + TypeScript and Expo.
 
-**Phase 1 — scaffold and quality gates.** The app currently ships a placeholder
-screen only. No features are implemented yet.
+**Status: features implemented through Phase 7 hardening (search → results →
+details, stations list/map, favourites/recents, bg+en, onboarding) — all
+against the mock provider. Not released.** See `docs/checklist-status.md` for
+the production-readiness tracker (currently **NO-GO** for public release:
+human/legal items outstanding) and `CHANGELOG.md` for what changed per phase.
 
 ## Honest status (read this first)
 
 | Area | Status |
 |------|--------|
-| Train data source | **Mock-only.** No live BDZ (or third-party) data source is approved. See `docs/decisions.md` DEC-002 and `docs/bdz-integration-review.md`. The app shows **no** timetable data at this stage. |
+| Train data source | **Mock-only.** No live BDZ (or third-party) data source is approved. See `docs/decisions.md` DEC-002 and `docs/bdz-integration-review.md`. All schedule-like values shown in the app are **labelled demo data**. |
 | Live positions / delays / official BDZ status | **Never claimed.** Any future provider data must carry a visible provenance label: demo / scheduled / cached-stale / real-time (`src/types/provenance.ts`, DEC-006). |
 | In-app ticket sales | **Disabled** (feature flag `ticketSales` OFF, mock provider only) until written BDZ authorization and a supported integration exist (DEC-004, plan.md 17.1). |
 | Payment card data | Never collected, stored or logged — by design; provider-hosted checkout only (plan.md 17.3). |
 | Capacity ("1,000,000 concurrent users") | **No such claim.** Load test not run (DEC-011, `docs/scale-and-load-test-plan.md`). |
 | CI | Workflow exists (`.github/workflows/ci.yml`) and the repo was pushed to GitHub on 2026-10-22, so a run **may** have been triggered. **No agent has observed any CI run or its output — treat CI status as UNVERIFIED** and check the repository's Actions tab. |
 | iOS / Android builds | **NOT RUN** in this environment (Linux). See [Building](#building). |
-| Store submission | Not started. |
+| Store submission | Not started. Drafts only: `docs/store-metadata-draft.md`, `docs/privacy-labels-draft.md`, `docs/release-notes-draft.md` (all require human/legal approval). |
+| Tests | **806 tests / 65 suites, gates green 2026-10-25** (`npm run typecheck` PASS, `npm run lint` 0 problems, `npm run format:check` PASS — DEC-027). Must be re-run before release. Device testing **NOT RUN**. |
+| Product name | "BDZ Train Companion" is a **working name, UNCONFIRMED** (`review.common.app_name` in the locale catalogs). |
+| Release readiness | **NO-GO for public release** — see `docs/checklist-status.md` (authorization, legal review, translation review, named human owners all open). |
 
 ## Prerequisites
 
@@ -52,7 +58,7 @@ Run these after every meaningful change (AGENTS.md):
 ```sh
 npm run typecheck     # tsc --noEmit, strict mode
 npm run lint          # eslint (eslint-config-expo + prettier)
-npm test              # jest (jest-expo preset) — smoke tests
+npm test              # jest (jest-expo preset)
 npm run test:ci       # jest --ci (used by CI)
 npm run format        # prettier --write .
 npm run format:check  # prettier --check .
@@ -65,13 +71,17 @@ npm run audit:deps    # npm audit --audit-level=high (dependency gate)
 high/critical advisories. It also runs in CI as an advisory job
 (`dependency-audit`, non-blocking for now — see the comment in the workflow).
 
-**Known advisories (verified 2026-10-22, `npm audit --json`):** 48 findings
-(18 moderate, 30 high) from 3 unique upstream advisories —
-`braces` (stack-exhaustion DoS), `node-forge` (PKCS#1 v1.5 signature
-verification), `sprintf-js` (DoS via unbounded precision) — all transitive
-through Expo SDK 58 / React Native 0.88 / Jest 30 tooling chains. No
-non-breaking fix exists today (`npm audit fix` offers only breaking
-downgrades); the security owner must triage/upgrade as upstream patches land.
+**Known advisories (re-verified 2026-10-24, `npm audit --json` — DEC-019
+re-baseline):** 5 high-severity findings from 2 unique upstream advisories —
+`node-forge` (GHSA-86w9-cpqp-85rv, transitive via
+`@expo/code-signing-certificates`, **no patch available**) and a `zod`
+advisory (GHSA-mrhx-c7xc-m3w5) affecting only `@expo/cli`'s nested
+`zod@3.25.76` build tooling — the app's direct `zod@4.6.7` is patched. Two
+advisories in the original 2026-10-22 baseline (`braces`, `sprintf-js`) were
+withdrawn upstream on 2026-10-22/23. No non-breaking fix exists
+(`npm audit fix` offers only breaking downgrades; **never** run
+`npm audit fix --force`); re-baselining the CI audit gate is a decision for the
+security owner (UNASSIGNED).
 
 ## Environment variables
 
@@ -85,18 +95,24 @@ See `.env.example`. Rules (plan.md §7, addbeforerelease.txt §5):
 - `EXPO_PUBLIC_TRAIN_API_BASE_URL` is intentionally empty: no live data source
   is approved (DEC-002).
 - `EXPO_PUBLIC_MAP_SDK_KEY` is a public identifier; restrict it by bundle id /
-  package name at the provider. Map SDK not selected yet (DEC-012).
+  package name at the provider. **No map key exists today**: the map stack is
+  MapLibre React Native + OpenFreeMap (keyless) — DEC-012 (decided by the human
+  owner 2026-10-24).
 
 ## Testing
 
 - `npm test` — Jest with the `jest-expo` preset and React Native Testing
   Library v14 (note: its `render` is **async** — `await render(...)`).
-- Tests live in `tests/` (e.g. `tests/smoke/`); shared setup in `src/test/`.
-- Current coverage: one smoke test proving the placeholder screen renders and
-  makes no live-data/official-status claims. Feature tests arrive with Waves 3+
-  (plan.md §11).
+- Tests live in `tests/` (unit, component, integration against the mock
+  provider, plus in-app e2e smoke and an accessibility sweep); shared setup in
+  `src/test/`.
+- Current coverage: **806 tests / 65 suites, all passing (2026-10-25, DEC-027)**
+  — re-run before release. This is a Jest/Node environment result; it is **not**
+  device testing.
 - Physical-device testing (Android + iOS) is required before release
-  (addbeforerelease.txt §14) and has **NOT RUN** here.
+  (addbeforerelease.txt §14) and has **NOT RUN** here. VoiceOver/TalkBack
+  behaviour is code-tested only (`docs/voiceover-talkback-scripts.md` await a
+  human device session).
 
 ## Building
 
@@ -156,7 +172,9 @@ Docker provides a repeatable Node toolchain — nothing more.
   DEC-020).
 - Gates inside the container (`docker compose run --rm mobile ...`) — **PASSED**:
   `npm run typecheck`, `npm run lint`, `npm test` → **435 passed / 435 in 35
-  suites**. Two tests needed explicit 20s timeouts (they exceeded Jest's 5s
+  suites** (2026-10-24; the host suite has since grown to **806 tests / 65
+  suites** — re-run the container gates before trusting this number here). Two
+  tests needed explicit 20s timeouts (they exceeded Jest's 5s
   default under container CPU load — recorded as a defect + fix, DEC-020).
 - Metro reachability from the host — **PASSED**: `docker compose up -d`, then
   `curl http://127.0.0.1:8081/status` → `packager-status:running`. The port is
@@ -197,9 +215,28 @@ src/services/   TrainDataProvider / TicketingProvider seams (Phase 0 specs)
 src/types/      domain models (Phase 0 specs)
 src/test/       shared test setup
 tests/          test suites (jest)
-docs/           decision log, integration review, compliance, scale plan
+docs/           decision log, integration review, compliance, scale plan, release docs
 scripts/        repo tooling scripts (none yet)
 ```
+
+## Documentation map
+
+- `docs/checklist-status.md` — status of **every** `addbeforerelease.txt`
+  checklist item (sections 1–17 + GO/NO-GO) with evidence and owners.
+- `docs/decisions.md` — architecture decision log (DEC-001 … DEC-027).
+- `docs/release-notes-draft.md` — 0.1.0 release notes (**draft**).
+- `docs/store-metadata-draft.md` — app-store listing metadata (**draft**).
+- `docs/privacy-labels-draft.md` — App Store privacy labels / Play data safety
+  (**draft**).
+- `CHANGELOG.md` — per-phase change summary (**draft**).
+- `docs/bdz-integration-review.md`, `docs/legal-compliance-matrix.md`,
+  `docs/threat-model.md`, `docs/security-privacy-review-*.md`,
+  `docs/map-sdk-comparison.md`, `docs/station-dataset-licensing.md`,
+  `docs/scale-and-load-test-plan.md`, `docs/accessibility-checklist.md`,
+  `docs/voiceover-talkback-scripts.md`.
+
+Everything marked **draft** requires human/legal approval before it goes
+public.
 
 ## Continuous integration
 

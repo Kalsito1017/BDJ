@@ -26,6 +26,7 @@ import type { Journey } from '../types/journey';
 import { useTrainDataProvider } from './AppDataProvider';
 import { runProviderCall } from './internals';
 import { journeyQueryKeys } from './queryKeys';
+import { useNetworkStatusPort } from './useNetworkStatus';
 
 export interface JourneyState {
   /** The journey; undefined while loading, disabled or on error. */
@@ -40,6 +41,7 @@ export interface JourneyState {
 
 export function useJourney(journeyId: string | null): JourneyState {
   const provider = useTrainDataProvider();
+  const networkStatus = useNetworkStatusPort();
   const id = journeyId === null ? null : journeyId.trim();
   const enabled = id !== null && id !== '';
 
@@ -62,7 +64,10 @@ export function useJourney(journeyId: string | null): JourneyState {
           'The configured provider does not support journey details.',
         );
       }
-      return runProviderCall(() => getJourney.call(provider, id, { signal }));
+      return runProviderCall(
+        () => getJourney.call(provider, id, { signal }),
+        networkStatus,
+      );
     },
     enabled,
     // No React Query auto-retry — the request executor owns retries (DEC-007).

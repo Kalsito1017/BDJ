@@ -29,8 +29,15 @@ export const LocalTimeOfDaySchema = z
 /** Whole days after the travel date (0 = same day, 1 = next day, ...). */
 export const DayOffsetSchema = z.number().int().min(0);
 
-/** Opaque provider identifier. */
-export const EntityIdSchema = z.string().min(1);
+/**
+ * Opaque provider identifier. Bounded (DEC-019 W3-M1): unbounded strings are
+ * the same weakness class as the zod advisory — ids are short opaque tokens
+ * (the mock's are ASCII slugs); 128 chars is far beyond any real id.
+ */
+export const EntityIdSchema = z.string().min(1).max(128);
+
+/** Display-name bound (station/segment names); fixtures max out below 80 chars. */
+export const MAX_NAME_LENGTH = 200;
 
 /** WGS84 decimal degrees. */
 export const GeoPointSchema = z.object({

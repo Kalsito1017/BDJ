@@ -47,6 +47,12 @@ export function journeySearchFromRouteParams(
   if (fromStationId === '' || toStationId === '' || fromStationId === toStationId) {
     return null;
   }
+  // Defence-in-depth (P5-M1/W3B-M1): hostile deep links can carry oversized or
+  // control-character ids; the store rejects them too (LocalStoreInputError),
+  // but the route boundary filters them before any screen or store sees them.
+  const idOk = (value: string): boolean =>
+    value.length > 0 && value.length <= 128 && !/[\u0000-\u001f\u007f]/.test(value);
+  if (!idOk(fromStationId) || !idOk(toStationId)) return null;
   if (!isValidIsoDate(date)) return null;
   const today = getToday();
   if (date < today || date > addDaysIso(today, MAX_DAYS_AHEAD)) return null;

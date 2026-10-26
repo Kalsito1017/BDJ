@@ -40,6 +40,14 @@ import {
   type RequestOptions,
 } from '../../src/services/common/RequestOptions';
 import {
+  createMemoryLocalStore,
+  type LocalStore,
+} from '../../src/services/storage/localStore';
+import {
+  createNetworkStatusPort,
+  type NetworkStatusPort,
+} from '../../src/services/network/networkStatus';
+import {
   MockTrainDataProvider,
   type MockTrainDataProviderConfig,
   type MockScenario,
@@ -234,6 +242,10 @@ export interface RenderDataHookOptions<Props> {
   provider?: TrainDataProvider;
   queryClient?: QueryClient;
   initialProps?: Props;
+  /** Injected local store (Phase 5); default: AsyncStorage-backed singleton. */
+  localStore?: LocalStore;
+  /** Injected network-status port (Phase 5); default: inferred singleton. */
+  networkStatus?: NetworkStatusPort;
 }
 
 /**
@@ -271,10 +283,17 @@ export async function renderDataHook<Result, Props>(
   const provider = options.provider ?? new MockTrainDataProvider();
   const queryClient = options.queryClient ?? createAppQueryClient();
   trackedQueryClients.add(queryClient);
+  const localStore = options.localStore ?? createMemoryLocalStore();
+  const networkStatus = options.networkStatus ?? createNetworkStatusPort();
 
   function Wrapper({ children }: { children: ReactNode }): ReactNode {
     return (
-      <AppDataProvider provider={provider} queryClient={queryClient}>
+      <AppDataProvider
+        provider={provider}
+        queryClient={queryClient}
+        localStore={localStore}
+        networkStatus={networkStatus}
+      >
         {children}
       </AppDataProvider>
     );

@@ -44,16 +44,18 @@ export {
 export interface DemoFixtures {
   /** Parsed + mapped demo stations (lookup view), in fixture order. */
   readonly stations: readonly Station[];
-  /** Raw station payloads keyed by id (the "wire" form). */
-  readonly stationPayloads: Readonly<Record<string, RawPayload>>;
+  /** Raw station payloads keyed by id (the "wire" form). `Map` on purpose:
+   *  prototype-less id lookups (DEC-019 W3-L3) — an id like 'constructor'
+   *  can never resolve to `Object.prototype` members. */
+  readonly stationPayloads: ReadonlyMap<string, RawPayload>;
   /** Raw full-directory payload (the "wire" form). */
   readonly directoryPayload: RawPayload;
   /** Parsed + mapped demo journeys, deterministic order (route order, then list). */
   readonly journeys: readonly Journey[];
   /** Raw journey payloads in the same order as `journeys`. */
   readonly journeyPayloads: readonly RawPayload[];
-  /** Raw journey payloads keyed by journey id. */
-  readonly journeyPayloadsById: Readonly<Record<string, RawPayload>>;
+  /** Raw journey payloads keyed by journey id (prototype-less — W3-L3). */
+  readonly journeyPayloadsById: ReadonlyMap<string, RawPayload>;
 }
 
 function fixtureClock(): () => Date {
@@ -76,7 +78,7 @@ export function loadDemoFixtures(): DemoFixtures {
     ),
   );
 
-  const stationPayloads: Record<string, RawPayload> = {};
+  const stationPayloads = new Map<string, RawPayload>();
   for (const payload of DEMO_STATION_PAYLOADS) {
     const id = parseExternalPayload(
       StationSchema,
@@ -84,12 +86,12 @@ export function loadDemoFixtures(): DemoFixtures {
       'Demo station fixture',
       clock,
     ).id;
-    stationPayloads[id] = payload;
+    stationPayloads.set(id, payload);
   }
 
   const journeys: Journey[] = [];
   const journeyPayloads: RawPayload[] = [];
-  const journeyPayloadsById: Record<string, RawPayload> = {};
+  const journeyPayloadsById = new Map<string, RawPayload>();
   for (const payloads of Object.values(DEMO_JOURNEY_PAYLOADS_BY_ROUTE)) {
     for (const payload of payloads) {
       const journey = mapJourney(
@@ -98,7 +100,7 @@ export function loadDemoFixtures(): DemoFixtures {
       );
       journeys.push(journey);
       journeyPayloads.push(payload);
-      journeyPayloadsById[journey.id] = payload;
+      journeyPayloadsById.set(journey.id, payload);
     }
   }
 

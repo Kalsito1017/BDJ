@@ -10,7 +10,10 @@
  * Tested in English (the claims lexicon is English); Bulgarian copy is
  * covered by the i18n-a11y workstream.
  */
-import { render, screen, fireEvent } from '@testing-library/react-native';
+import { render as renderRntl, screen, fireEvent } from '@testing-library/react-native';
+import type { ReactNode } from 'react';
+
+import { AppDataProvider } from '../../src/hooks';
 
 import PlaceholderHomeScreen from '../../src/app/index';
 import MapScreen from '../../src/app/(tabs)/map';
@@ -54,6 +57,10 @@ function renderedText(): string {
  * the only place these words may appear — and `real-time` provenance cannot
  * be produced until DEC-002 is superseded (src/types/provenance.ts).
  */
+/** Render inside AppDataProvider: screens use the hooks/store context (Phase 5). */
+const render = (node: ReactNode): ReturnType<typeof renderRntl> =>
+  renderRntl(<AppDataProvider>{node}</AppDataProvider>);
+
 const FORBIDDEN_CLAIM_PATTERNS: readonly [string, RegExp][] = [
   ['real-time claim', /\breal[\s-]?time\b/i],
   ['live claim', /\blive\b/i],

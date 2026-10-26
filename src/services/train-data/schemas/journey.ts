@@ -17,41 +17,42 @@ import {
   IsoDateSchema,
   IsoDateTimeSchema,
   LocalTimeOfDaySchema,
+  MAX_NAME_LENGTH,
 } from './common';
 import { InformationProvenanceSchema } from './provenance';
 import { validateJourneyInvariant } from '../journeyInvariant';
 
 /** Search input echo (plan.md §4 `JourneySearch`, extended — DEC-006). */
 export const JourneySearchSchema = z.object({
-  fromStationId: z.string().min(1),
-  toStationId: z.string().min(1),
+  fromStationId: EntityIdSchema,
+  toStationId: EntityIdSchema,
   date: IsoDateSchema,
   time: LocalTimeOfDaySchema.optional(),
-  limit: z.number().int().min(1).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
 });
 
 export const TrainSegmentSchema = z.object({
   kind: z.literal('train'),
-  fromStationId: z.string().min(1),
-  toStationId: z.string().min(1),
+  fromStationId: EntityIdSchema,
+  toStationId: EntityIdSchema,
   /** Planned `HH:mm` (Europe/Sofia); null = "unknown", never estimated. */
   departureTime: LocalTimeOfDaySchema.nullable(),
   arrivalTime: LocalTimeOfDaySchema.nullable(),
-  trainNumber: z.string().min(1).optional(),
+  trainNumber: z.string().min(1).max(100).optional(),
   departureDayOffset: DayOffsetSchema.optional(),
   arrivalDayOffset: DayOffsetSchema.optional(),
-  trainCategory: z.string().min(1).optional(),
-  trainName: z.string().min(1).optional(),
+  trainCategory: z.string().min(1).max(100).optional(),
+  trainName: z.string().min(1).max(MAX_NAME_LENGTH).optional(),
   /** Provider-supplied status verbatim — NOT a delay/real-time claim. */
-  providerStatus: z.string().min(1).optional(),
+  providerStatus: z.string().min(1).max(300).optional(),
   provenance: InformationProvenanceSchema.optional(),
 });
 
 export const TransferSegmentSchema = z.object({
   kind: z.literal('transfer'),
-  fromStationId: z.string().min(1),
-  toStationId: z.string().min(1),
-  plannedMinutes: z.number().int().min(0).optional(),
+  fromStationId: EntityIdSchema,
+  toStationId: EntityIdSchema,
+  plannedMinutes: z.number().int().min(0).max(10_000).optional(),
   stationChangeRequired: z.boolean(),
   provenance: InformationProvenanceSchema.optional(),
 });
@@ -65,9 +66,10 @@ export const JourneyLegSchema = z.discriminatedUnion('kind', [
 export const JourneySchema = z
   .object({
     id: EntityIdSchema,
-    segments: z.array(TrainSegmentSchema),
-    legs: z.array(JourneyLegSchema),
-    durationMinutes: z.number().int().min(0).optional(),
+    /** Bounded (DEC-019 W3-M1): no real journey has hundreds of legs. */
+    segments: z.array(TrainSegmentSchema).max(50),
+    legs: z.array(JourneyLegSchema).max(50),
+    durationMinutes: z.number().int().min(0).max(100_000).optional(),
     sourceUpdatedAt: IsoDateTimeSchema.optional(),
     fetchedAt: IsoDateTimeSchema.optional(),
     provenance: InformationProvenanceSchema,
@@ -80,7 +82,8 @@ export const JourneySchema = z
 
 export const JourneySearchResultSchema = z.object({
   search: JourneySearchSchema,
-  journeys: z.array(JourneySchema),
+  /** Bounded (DEC-019 W3-M1). */
+  journeys: z.array(JourneySchema).max(200),
   fetchedAt: IsoDateTimeSchema,
   provenance: InformationProvenanceSchema,
 });

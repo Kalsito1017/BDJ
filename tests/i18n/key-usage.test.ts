@@ -41,6 +41,7 @@ const REGISTRY_FILES = [
   'features/journey-results/translationKeys.ts',
   'features/journey-details/translationKeys.ts',
   'features/station-picker/translationKeys.ts',
+  'features/favourites/translationKeys.ts',
 ];
 
 function listSourceFiles(dir: string): string[] {

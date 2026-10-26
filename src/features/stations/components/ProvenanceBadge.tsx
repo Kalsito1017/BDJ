@@ -2,20 +2,32 @@
  * Provenance labelling primitives (DEC-006 / rule 6): every surface that
  * renders station data MUST show a provenance label, and demo data MUST
  * show the demo label. There is no render path for data without one.
+ *
+ * CONVERGENCE (DEC-019 L5): the CANONICAL component is the shared
+ * `src/components/ProvenanceBadge` (themed, app-wide). This local renderer
+ * is a `t`-injected twin kept only because the stations feature is
+ * deliberately self-contained (props-injected `Translate`, no hook imports
+ * outside useStationsTranslate.ts). It has converged onto the canonical
+ * contract so both renderers show IDENTICAL text and IDENTICAL screen-
+ * reader metadata app-wide:
+ *  - labels: the shared `provenance.*` vocabulary (src/i18n/keys.ts
+ *    PROVENANCE_LABEL_KEYS) — the feature's old `stations.provenance.*`
+ *    duplicates are retired (reported for catalog deletion);
+ *  - a11y: `a11y.provenance_badge` + `a11y.provenance_badge_hint`, same as
+ *    the shared badge.
+ * Remaining difference: styling (theme hooks vs local styles) and the `t`
+ * seam. Deleting this twin entirely needs a `src/components` change (the
+ * shared badge cannot accept an injected `t` today) — proposed to the lead
+ * in the map-wave report; until then this file MUST stay API-compatible
+ * with the shared one's vocabulary.
  */
 
 import { StyleSheet, Text, View } from 'react-native';
 
+import { PROVENANCE_LABEL_KEYS } from '../../../i18n/keys';
 import type { InformationProvenance } from '../../../types';
 import { STATIONS_KEYS } from '../translationKeys';
 import type { Translate } from '../types';
-
-const KEY_BY_KIND = {
-  demo: STATIONS_KEYS.provenanceDemo,
-  scheduled: STATIONS_KEYS.provenanceScheduled,
-  'cached-stale': STATIONS_KEYS.provenanceCachedStale,
-  'real-time': STATIONS_KEYS.provenanceRealTime,
-} as const;
 
 export interface ProvenanceBadgeProps {
   t: Translate;
@@ -23,9 +35,16 @@ export interface ProvenanceBadgeProps {
 }
 
 export function ProvenanceBadge({ t, provenance }: ProvenanceBadgeProps) {
+  const label = t(PROVENANCE_LABEL_KEYS[provenance.kind]);
   return (
-    <View style={styles.badge} testID="stations-provenance-badge">
-      <Text style={styles.badgeText}>{t(KEY_BY_KIND[provenance.kind])}</Text>
+    <View
+      style={styles.badge}
+      testID="stations-provenance-badge"
+      accessible
+      accessibilityLabel={t('a11y.provenance_badge', { label })}
+      accessibilityHint={t('a11y.provenance_badge_hint')}
+    >
+      <Text style={styles.badgeText}>{label}</Text>
     </View>
   );
 }

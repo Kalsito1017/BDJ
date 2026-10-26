@@ -13,6 +13,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  type AccessibilityState,
   type ViewStyle,
 } from 'react-native';
 
@@ -32,6 +33,8 @@ export interface ButtonProps {
   accessibilityLabel?: string;
   /** Optional screen-reader hint (use a11y.* keys at the call site). */
   accessibilityHint?: string;
+  /** Optional state for screen readers (e.g. `{ selected: true }` toggles). */
+  accessibilityState?: AccessibilityState;
   testID?: string;
 }
 
@@ -43,6 +46,7 @@ export function Button({
   loading = false,
   accessibilityLabel,
   accessibilityHint,
+  accessibilityState,
   testID,
 }: ButtonProps) {
   const theme = useTheme();
@@ -81,7 +85,7 @@ export function Button({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityHint={accessibilityHint}
-      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      accessibilityState={{ disabled: isDisabled, busy: loading, ...accessibilityState }}
       disabled={isDisabled}
       onPress={onPress}
       style={({ pressed }) => [

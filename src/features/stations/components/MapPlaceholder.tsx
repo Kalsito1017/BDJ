@@ -1,16 +1,20 @@
 /**
- * Map area placeholder — NO map SDK is installed and none may be until the
- * human records DEC-012 (docs/map-sdk-comparison.md is the research input).
+ * Map area fallback — clearly-labelled placeholder shown whenever the
+ * interactive map cannot render (MapLibre native module absent: Expo Go,
+ * web, unit tests, older devices — see map/loadMapLibre.ts and
+ * map/StationsMapSurface.tsx).
  *
- * This placeholder is deliberately explicit:
- * - it says the map SDK decision is pending a human decision;
+ * The placeholder is deliberately explicit:
+ * - it says honestly that the map is not available in this build and why;
  * - it repeats the rule that a map line never implies an operational route
  *   and a marker never implies real-time service (plan.md 17.5);
  * - it reserves the attribution area (addbeforerelease.txt 9) and carries
  *   the mandatory demo notice (rule 6).
  *
- * When an SDK is chosen, this component is replaced — the surrounding
- * stations feature does not change.
+ * NOTE (map wave): the rendered copy comes from `map.pending.*`, whose
+ * catalog values still predate the DEC-012 decision; updated wording is
+ * proposed to the catalog owner in the map-wave report. The component and
+ * its key contract are unchanged on purpose (one stable fallback surface).
  */
 
 import { StyleSheet, Text, View } from 'react-native';

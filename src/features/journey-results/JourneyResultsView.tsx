@@ -45,6 +45,12 @@ export interface JourneyResultsViewProps {
   refreshing?: boolean;
   /** `HH:mm` of the last successful fetch, when known (cache freshness). */
   fetchedAtTime?: string | null;
+  /** Query staleness flag (`useJourneySearch().isStale`): renders the
+   *  "may be out of date" hint — never provenance (rule 6, DEC-021). */
+  stale?: boolean;
+  /** Extra header-area content rendered in every state (e.g. the offline
+   *  banner and the SaveRouteControl slot). */
+  headerExtras?: React.ReactNode;
   onRetry?: () => void;
   onRefresh?: () => void;
   onChangeSearch?: () => void;
@@ -62,6 +68,8 @@ export function JourneyResultsView({
   error,
   refreshing = false,
   fetchedAtTime,
+  stale = false,
+  headerExtras,
   onRetry,
   onRefresh,
   onChangeSearch,
@@ -141,6 +149,15 @@ export function JourneyResultsView({
           {t(JOURNEY_RESULTS_KEYS.fetchedAt, { time: fetchedAtTime })}
         </Text>
       ) : null}
+      {stale ? (
+        <Text
+          style={[type.caption, { color: colors.textSecondary }]}
+          testID={testID ? `${testID}-stale-hint` : undefined}
+        >
+          {t(JOURNEY_RESULTS_KEYS.staleHint)}
+        </Text>
+      ) : null}
+      {headerExtras}
       <DemoDataNotice testID={testID ? `${testID}-demo-notice` : undefined} />
       {onChangeSearch && !loading && !error && journeys.length > 0 ? (
         <Button

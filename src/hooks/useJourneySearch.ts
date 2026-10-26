@@ -33,6 +33,14 @@
  *  - On `isError` after a success, `result` keeps the last good envelope;
  *    screens decide whether to keep showing it (labelled with its age) or
  *    show the error state.
+ *  - `isStale` (ADDITIVE, rule 6 caution): true once the data on screen is
+ *    older than `APP_CACHE_POLICY.journeyStaleTimeMs` (60 s) — the screen
+ *    shows a "may be out of date" hint (i18n key proposed in the
+ *    data-provider report) and MAY keep the results visible. It flips back to
+ *    false when fresh data arrives, and it NEVER produces `cached-stale`
+ *    provenance (see above). The flag re-renders on its own when the age
+ *    crosses the threshold (React Query's internal staleTime timer), so
+ *    screens need no timer of their own.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -43,6 +51,7 @@ import type { Journey, JourneySearch, JourneySearchResult } from '../types/journ
 import { useTrainDataProvider } from './AppDataProvider';
 import { EMPTY_JOURNEYS, runProviderCall } from './internals';
 import { journeyQueryKeys, normalizeJourneySearch } from './queryKeys';
+import { useNetworkStatusPort } from './useNetworkStatus';
 
 export interface JourneySearchState {
   /** The provider's result envelope; undefined until the first successful fetch. */
@@ -60,10 +69,27 @@ export interface JourneySearchState {
   isFetching: boolean;
   /** Ms epoch of the last successful fetch (0 before the first) — freshness labelling. */
   dataUpdatedAt: number;
+  /**
+   * ADDITIVE: true once the shown data is older than
+   * `APP_CACHE_POLICY.journeyStaleTimeMs` — show a "may be out of date" hint.
+   * Never a `cached-stale` provenance (rule 6).
+   */
+  isStale: boolean;
+}
+
+/**
+ * Staleness (rule 6 caution): derived from TanStack Query's own `isStale`,
+ * which flips via its internal staleTime timer — no clock reads in render and
+ * no setState-in-effect (react-hooks/purity / set-state-in-effect). False when
+ * nothing is shown yet, so the hint only ever accompanies real data.
+ */
+function useStaleFlag(dataUpdatedAt: number, isStaleFromQuery: boolean): boolean {
+  return dataUpdatedAt !== 0 && isStaleFromQuery;
 }
 
 export function useJourneySearch(input: JourneySearch | null): JourneySearchState {
   const provider = useTrainDataProvider();
+  const networkStatus = useNetworkStatusPort();
   const search = input === null ? null : normalizeJourneySearch(input);
   const enabled = search !== null;
 
@@ -78,12 +104,17 @@ export function useJourneySearch(input: JourneySearch | null): JourneySearchStat
           'useJourneySearch queryFn ran while the search input was incomplete.',
         );
       }
-      return runProviderCall(() => provider.searchJourneys(search, { signal }));
+      return runProviderCall(
+        () => provider.searchJourneys(search, { signal }),
+        networkStatus,
+      );
     },
     enabled,
     // No React Query auto-retry — the request executor owns retries (DEC-007).
     retry: false,
   });
+
+  const isStale = useStaleFlag(result.dataUpdatedAt, result.isStale);
 
   return {
     result: result.data,
@@ -97,5 +128,6 @@ export function useJourneySearch(input: JourneySearch | null): JourneySearchStat
     },
     isFetching: result.isFetching,
     dataUpdatedAt: result.dataUpdatedAt,
+    isStale,
   };
 }

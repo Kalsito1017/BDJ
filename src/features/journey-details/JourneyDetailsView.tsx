@@ -43,6 +43,8 @@ export interface JourneyDetailsViewProps {
   onBack: () => void;
   /** Resolves a station id to its display name (screen-level lookup). */
   stationName: (stationId: string) => string;
+  /** Extra header-area content (e.g. the SaveRouteControl slot). */
+  headerExtras?: React.ReactNode;
   testID?: string;
 }
 
@@ -54,6 +56,7 @@ export function JourneyDetailsView({
   onRetry,
   onBack,
   stationName,
+  headerExtras,
   testID,
 }: JourneyDetailsViewProps) {
   const theme = useTheme();
@@ -136,6 +139,7 @@ export function JourneyDetailsView({
         variant="secondary"
       />
       <DemoDataNotice testID={testID ? `${testID}-demo-notice` : undefined} />
+      {headerExtras}
       {body}
     </ScreenContainer>
   );

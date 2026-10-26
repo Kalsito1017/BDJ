@@ -6,19 +6,20 @@
  * the demo dataset and the translation bridge.
  *
  * Layout note: no nested scroll views. The content area shows exactly one
- * of: loading / detail card / map placeholder / empty state / station list.
- * The nearby panel sits below (checklist 9: everything reachable without
- * location permission).
+ * of: loading / detail card / the map (or its clearly-labelled fallback
+ * placeholder) / empty state / station list. The nearby panel sits below
+ * (checklist 9: everything reachable without location permission).
  */
 
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { Station } from '../../types';
-import { MapPlaceholder } from './components/MapPlaceholder';
 import { NearbyStationsSection } from './components/NearbyStationsSection';
 import { DemoNotice } from './components/ProvenanceBadge';
 import { StationDetailCard } from './components/StationDetailCard';
 import { StationList } from './components/StationList';
+import type { MapLibreModule } from './map/loadMapLibre';
+import { StationsMapSurface } from './map/StationsMapSurface';
 import { STATIONS_KEYS } from './translationKeys';
 import type {
   DirectoryStatus,
@@ -27,6 +28,13 @@ import type {
   StationsViewMode,
   Translate,
 } from './types';
+
+/**
+ * Search query length bound (DEC-023 W3B-L1 / DEC-019 W3-L5): a pasted
+ * multi-MB query must never reach the search model or a future provider.
+ * 128 matches the journey station picker's bound.
+ */
+export const SEARCH_QUERY_MAX_LENGTH = 128;
 
 export interface StationsViewProps {
   t: Translate;
@@ -43,6 +51,15 @@ export interface StationsViewProps {
   onSelectStation: (station: Station) => void;
   onCloseDetail: () => void;
   locationPort: LocationPort;
+  /**
+   * `mapStationDiscovery` feature flag gate (the flag ON is NOT a ship
+   * approval — DEC-012 + a licensed station dataset are still required,
+   * DEC-019 L8). When false the map toggle disappears and the accessible
+   * list is the only discovery surface.
+   */
+  mapEnabled?: boolean;
+  /** Test seam for the MapLibre module (see StationsMapSurface). */
+  mapLibre?: MapLibreModule | null;
 }
 
 export function StationsView({
@@ -58,7 +75,11 @@ export function StationsView({
   onSelectStation,
   onCloseDetail,
   locationPort,
+  mapEnabled = true,
+  mapLibre,
 }: StationsViewProps) {
+  // The list stays the default and the accessible alternative (checklist 9).
+  const effectiveViewMode: StationsViewMode = mapEnabled ? viewMode : 'list';
   return (
     <View style={styles.container} testID="stations-screen">
       <View style={styles.header}>
@@ -80,6 +101,7 @@ export function StationsView({
           placeholder={t(STATIONS_KEYS.searchPlaceholder)}
           value={query}
           onChangeText={onQueryChange}
+          maxLength={SEARCH_QUERY_MAX_LENGTH}
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -87,39 +109,50 @@ export function StationsView({
           {t(STATIONS_KEYS.resultCount, { count: stations.length })}
         </Text>
 
-        <View style={styles.toggleRow}>
-          <Pressable
-            testID="stations-toggle-list"
-            accessibilityRole="button"
-            accessibilityLabel={t(STATIONS_KEYS.viewToggleLabel)}
-            accessibilityState={{ selected: viewMode === 'list' }}
-            onPress={() => onViewModeChange('list')}
-            style={[
-              styles.toggleButton,
-              viewMode === 'list' && styles.toggleButtonActive,
-            ]}
-          >
-            <Text
-              style={[styles.toggleText, viewMode === 'list' && styles.toggleTextActive]}
+        {mapEnabled ? (
+          <View style={styles.toggleRow}>
+            <Pressable
+              testID="stations-toggle-list"
+              accessibilityRole="button"
+              accessibilityLabel={t(STATIONS_KEYS.viewToggleLabel)}
+              accessibilityState={{ selected: effectiveViewMode === 'list' }}
+              onPress={() => onViewModeChange('list')}
+              style={[
+                styles.toggleButton,
+                effectiveViewMode === 'list' && styles.toggleButtonActive,
+              ]}
             >
-              {t(STATIONS_KEYS.viewList)}
-            </Text>
-          </Pressable>
-          <Pressable
-            testID="stations-toggle-map"
-            accessibilityRole="button"
-            accessibilityLabel={t(STATIONS_KEYS.viewToggleLabel)}
-            accessibilityState={{ selected: viewMode === 'map' }}
-            onPress={() => onViewModeChange('map')}
-            style={[styles.toggleButton, viewMode === 'map' && styles.toggleButtonActive]}
-          >
-            <Text
-              style={[styles.toggleText, viewMode === 'map' && styles.toggleTextActive]}
+              <Text
+                style={[
+                  styles.toggleText,
+                  effectiveViewMode === 'list' && styles.toggleTextActive,
+                ]}
+              >
+                {t(STATIONS_KEYS.viewList)}
+              </Text>
+            </Pressable>
+            <Pressable
+              testID="stations-toggle-map"
+              accessibilityRole="button"
+              accessibilityLabel={t(STATIONS_KEYS.viewToggleLabel)}
+              accessibilityState={{ selected: effectiveViewMode === 'map' }}
+              onPress={() => onViewModeChange('map')}
+              style={[
+                styles.toggleButton,
+                effectiveViewMode === 'map' && styles.toggleButtonActive,
+              ]}
             >
-              {t(STATIONS_KEYS.viewMap)}
-            </Text>
-          </Pressable>
-        </View>
+              <Text
+                style={[
+                  styles.toggleText,
+                  effectiveViewMode === 'map' && styles.toggleTextActive,
+                ]}
+              >
+                {t(STATIONS_KEYS.viewMap)}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.content}>
@@ -129,8 +162,13 @@ export function StationsView({
           </Text>
         ) : selectedStation ? (
           <StationDetailCard t={t} station={selectedStation} onClose={onCloseDetail} />
-        ) : viewMode === 'map' ? (
-          <MapPlaceholder t={t} />
+        ) : effectiveViewMode === 'map' ? (
+          <StationsMapSurface
+            t={t}
+            stations={stations}
+            onSelectStation={onSelectStation}
+            mapLibre={mapLibre}
+          />
         ) : stations.length === 0 ? (
           <View style={styles.stateBox} testID="stations-list-empty">
             <Text style={styles.stateText}>{t(STATIONS_KEYS.listEmptyTitle)}</Text>

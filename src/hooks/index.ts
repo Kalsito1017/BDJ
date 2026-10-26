@@ -6,12 +6,20 @@
  *
  * Contract summary (see the individual modules for full semantics):
  *   AppDataProvider   — QueryClient + TrainDataProvider context (defaults:
- *                      MockTrainDataProvider + createAppQueryClient()).
+ *                      MockTrainDataProvider + createAppQueryClient());
+ *                      also provides the LocalStore + NetworkStatusPort
+ *                      contexts (Phase 5) — both injectable for tests.
  *   useStationSearch  — debounced station search; empty query = full directory.
  *   useJourneySearch  — journey search envelope; enabled only with a complete
  *                       from/to/date input; exposes refetch/isFetching/
- *                       dataUpdatedAt for honest freshness labelling.
+ *                       dataUpdatedAt/isStale for honest freshness labelling.
  *   useJourney        — journey details by id.
+ *   useFavouriteRoutes / useRecentSearches — persisted local store (DEC-006),
+ *                       reactive via useSyncExternalStore.
+ *   useStoreNotices   — local-store corruption/write notices (DEC-007 App. B.4
+ *                       "reset per-field with a visible notice"), newest first.
+ *   useNetworkStatus  — NetworkStatusPort-backed connectivity hint + manual
+ *                       override (tests/demos); no real source in this build.
  *
  * Errors are typed `ProviderError` — map `error.code` through
  * `src/i18n/keys.ts` (`ERROR_MESSAGE_KEYS`) to `errors.*` i18n keys.
@@ -31,6 +39,31 @@ export {
 } from './useStationSearch';
 export { useJourneySearch, type JourneySearchState } from './useJourneySearch';
 export { useJourney, type JourneyState } from './useJourney';
+export {
+  LocalStoreProvider,
+  useLocalStore,
+  type LocalStoreProviderProps,
+} from './localStoreContext';
+export {
+  useFavouriteRoutes,
+  type AddFavouriteRouteInput,
+  type FavouriteRoutesState,
+} from './useFavouriteRoutes';
+export { useRecentSearches, type RecentSearchesState } from './useRecentSearches';
+export {
+  useStoreNotices,
+  type LocalStoreNotice,
+  type LocalStoreNoticeReason,
+  type StoreNoticesState,
+} from './useStoreNotices';
+export {
+  NetworkStatusProvider,
+  useNetworkStatus,
+  useNetworkStatusPort,
+  wireNetworkStatusToReactQuery,
+  type NetworkStatusProviderProps,
+  type NetworkStatusState,
+} from './useNetworkStatus';
 export {
   journeyQueryKeys,
   normalizeJourneySearch,

@@ -112,6 +112,22 @@ export const MOCK_DIRECTORY_TTL_MS = 24 * 60 * 60 * 1000;
 /** Default cap for station searches when `StationQuery.limit` is omitted. */
 export const MOCK_STATION_SEARCH_DEFAULT_LIMIT = 25;
 
+/**
+ * Length + charset bounds for id inputs at the provider boundary
+ * (DEC-023 W3B-M1). The mock's ids are short ASCII slugs
+ * (`demo-station-sofia-central`, `demo-journey-direct`); an input outside
+ * this alphabet cannot name anything in this provider, so it is rejected the
+ * same way as an unknown id: `not_found` with a STATIC message (the raw value
+ * is never echoed — DEC-019 W3-L1, "no payload values in errors"). The bound
+ * also keeps unbounded strings from reaching lookups, logs and query keys.
+ * A future live provider sets ITS boundary from ITS id format (DEC-002).
+ */
+export const MOCK_ID_INPUT_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+
+function isBoundedIdInput(value: string): boolean {
+  return MOCK_ID_INPUT_PATTERN.test(value);
+}
+
 export class MockTrainDataProvider implements TrainDataProvider {
   readonly id = 'mock';
   readonly displayName = 'Mock (demo data)';
@@ -156,7 +172,7 @@ export class MockTrainDataProvider implements TrainDataProvider {
   getJourney(journeyId: string, options?: RequestOptions): Promise<Journey> {
     return this.run(options, DEFAULT_TIMEOUTS_MS.read, () => {
       if (this.scenario === 'empty') {
-        throw this.notFound(`journey '${journeyId}' (scenario 'empty')`);
+        throw this.notFound('journey');
       }
       if (this.scenario === 'malformed') {
         // Schema-valid except for the DEC-006 invariant — rejected anyway.
@@ -170,8 +186,8 @@ export class MockTrainDataProvider implements TrainDataProvider {
           this.nowIso(),
         );
       }
-      const raw = this.fixtures.journeyPayloadsById[journeyId];
-      if (raw === undefined) throw this.notFound(`journey '${journeyId}'`);
+      const raw = this.lookupJourneyPayload(journeyId);
+      if (raw === undefined) throw this.notFound('journey');
       return mapJourney(
         parseExternalPayload(JourneySchema, raw, 'Mock journey payload', this.clock),
         this.nowIso(),
@@ -203,7 +219,7 @@ export class MockTrainDataProvider implements TrainDataProvider {
           mapStation(
             parseExternalPayload(
               StationSchema,
-              this.fixtures.stationPayloads[station.id],
+              this.lookupStationPayload(station.id) ?? {},
               'Mock station payload',
               this.clock,
             ),
@@ -252,7 +268,7 @@ export class MockTrainDataProvider implements TrainDataProvider {
   getStation(stationId: string, options?: RequestOptions): Promise<Station> {
     return this.run(options, DEFAULT_TIMEOUTS_MS.read, () => {
       if (this.scenario === 'empty') {
-        throw this.notFound(`station '${stationId}' (scenario 'empty')`);
+        throw this.notFound('station');
       }
       if (this.scenario === 'malformed') {
         return mapStation(
@@ -265,8 +281,8 @@ export class MockTrainDataProvider implements TrainDataProvider {
           this.nowIso(),
         );
       }
-      const raw = this.fixtures.stationPayloads[stationId];
-      if (raw === undefined) throw this.notFound(`station '${stationId}'`);
+      const raw = this.lookupStationPayload(stationId);
+      if (raw === undefined) throw this.notFound('station');
       return mapStation(
         parseExternalPayload(StationSchema, raw, 'Mock station payload', this.clock),
         this.nowIso(),
@@ -298,10 +314,36 @@ export class MockTrainDataProvider implements TrainDataProvider {
     return this.clock().toISOString();
   }
 
-  private notFound(what: string) {
-    return createProviderError('not_found', `Mock provider has no ${what}.`, {
-      now: this.clock,
-    });
+  /**
+   * `not_found` with a STATIC message: raw ids/payload values never appear in
+   * `ProviderError.message` (DEC-019 W3-L1 / DEC-023 W3B-L2). `kind` is a
+   * fixed union, never caller data.
+   */
+  private notFound(kind: 'station' | 'journey') {
+    return createProviderError(
+      'not_found',
+      kind === 'station'
+        ? 'Mock provider has no such station.'
+        : 'Mock provider has no such journey.',
+      { now: this.clock },
+    );
+  }
+
+  /**
+   * Bounded, prototype-less lookups (DEC-019 W3-L3 + DEC-023 W3B-M1): the
+   * fixture maps are `Map`s and ids outside the bounded input pattern cannot
+   * name anything here. Unknown/out-of-bounds ids are simply "not found"
+   * (`not_found`, static message) — 'constructor' no longer resolves to
+   * `Object.prototype` and turns into a nonsense `invalid_response`.
+   */
+  private lookupStationPayload(stationId: string): RawPayload | undefined {
+    if (!isBoundedIdInput(stationId)) return undefined;
+    return this.fixtures.stationPayloads.get(stationId);
+  }
+
+  private lookupJourneyPayload(journeyId: string): RawPayload | undefined {
+    if (!isBoundedIdInput(journeyId)) return undefined;
+    return this.fixtures.journeyPayloadsById.get(journeyId);
   }
 
   private isFailureScenario(): boolean {
@@ -367,11 +409,11 @@ export class MockTrainDataProvider implements TrainDataProvider {
   }
 
   private buildSearchResult(input: JourneySearch): JourneySearchResult {
-    // Input validation first (Appendix A.5): unknown ids are `not_found`
-    // regardless of the result-shaping scenario.
+    // Input validation first (Appendix A.5): unknown or out-of-bounds ids are
+    // `not_found` regardless of the result-shaping scenario.
     for (const stationId of [input.fromStationId, input.toStationId]) {
-      if (this.fixtures.stationPayloads[stationId] === undefined) {
-        throw this.notFound(`station '${stationId}'`);
+      if (this.lookupStationPayload(stationId) === undefined) {
+        throw this.notFound('station');
       }
     }
 
@@ -385,7 +427,9 @@ export class MockTrainDataProvider implements TrainDataProvider {
         ...(input.time !== undefined ? { time: input.time } : {}),
         ...(input.limit !== undefined ? { limit: input.limit } : {}),
       },
-      journeys: selected.map((journey) => this.fixtures.journeyPayloadsById[journey.id]),
+      // Unreachable in practice: `selected` comes from the loaded fixtures,
+      // whose payloads are all in the map (kept strict, never invented).
+      journeys: selected.map((journey) => this.lookupJourneyPayload(journey.id) ?? {}),
       fetchedAt,
       provenance: { kind: 'demo', fetchedAt },
     };

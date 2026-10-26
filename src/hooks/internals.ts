@@ -9,15 +9,31 @@
  */
 
 import { toProviderError } from '../services/api/providerErrors';
+import type { NetworkStatusPort } from '../services/network/networkStatus';
 import type { Journey } from '../types/journey';
 import type { Station } from '../types/station';
 
-/** Run a provider call, guaranteeing typed `ProviderError` rejections only. */
-export async function runProviderCall<T>(operation: () => Promise<T>): Promise<T> {
+/**
+ * Run a provider call, guaranteeing typed `ProviderError` rejections only.
+ *
+ * `reportTo` (optional) feeds the outcome to a `NetworkStatusPort` so the
+ * default port can infer connectivity (Phase 5). Reporting is deliberately
+ * HERE — the single choke point every provider call goes through — and only
+ * touches the INFERRED channel; see the port module for the rules (only
+ * 'offline'/'network' failures and successes move the inference).
+ */
+export async function runProviderCall<T>(
+  operation: () => Promise<T>,
+  reportTo?: NetworkStatusPort,
+): Promise<T> {
   try {
-    return await operation();
+    const result = await operation();
+    reportTo?.reportSuccess();
+    return result;
   } catch (error: unknown) {
-    throw toProviderError(error);
+    const providerError = toProviderError(error);
+    reportTo?.reportFailure(providerError.code);
+    throw providerError;
   }
 }
 

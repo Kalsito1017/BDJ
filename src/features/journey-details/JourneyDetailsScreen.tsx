@@ -17,8 +17,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from '../../i18n';
 import { useJourney, useStationSearch } from '../../hooks';
 import type { Station } from '../../types/station';
+import { SaveRouteControl } from '../favourites';
 
 import { JourneyDetailsView } from './JourneyDetailsView';
+import { firstTrainLeg, lastTrainLeg } from '../journey-results/model/journeyDisplay';
 import { JOURNEY_KEYS } from '../journey-results/translationKeys';
 
 function firstParam(value: string | string[] | undefined): string | null {
@@ -51,9 +53,24 @@ export function JourneyDetailsScreen({ testID }: JourneyDetailsScreenProps) {
     [stations, t],
   );
 
+  // "Save this route" saves the journey's endpoints as a route shortcut
+  // (NOT a ticket — rule 3 adjacency). Only a journey with train legs has
+  // endpoints to save.
+  const departure = journey ? firstTrainLeg(journey) : undefined;
+  const arrival = journey ? lastTrainLeg(journey) : undefined;
+
   return (
     <JourneyDetailsView
       error={isError ? error : null}
+      headerExtras={
+        departure && arrival ? (
+          <SaveRouteControl
+            fromStationId={departure.fromStationId}
+            testID="screen-journey-details-save-route"
+            toStationId={arrival.toStationId}
+          />
+        ) : undefined
+      }
       journey={journey ?? null}
       loading={isLoading}
       onBack={() => router.back()}

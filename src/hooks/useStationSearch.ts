@@ -31,6 +31,7 @@ import type { TrainDataProvider } from '../services/train-data';
 import { APP_CACHE_POLICY, useTrainDataProvider } from './AppDataProvider';
 import { EMPTY_STATIONS, runProviderCall } from './internals';
 import { normalizeSearchText, stationQueryKeys } from './queryKeys';
+import { useNetworkStatusPort } from './useNetworkStatus';
 
 /** Debounce for query CHANGES; the mount-time value is used immediately. */
 export const STATION_SEARCH_DEBOUNCE_MS = 250;
@@ -60,6 +61,7 @@ async function fetchAllStations(
 
 export function useStationSearch(query: string): StationSearchState {
   const provider = useTrainDataProvider();
+  const networkStatus = useNetworkStatusPort();
   const [debouncedText, setDebouncedText] = useState(() => normalizeSearchText(query));
 
   useEffect(() => {
@@ -76,10 +78,12 @@ export function useStationSearch(query: string): StationSearchState {
       ? stationQueryKeys.directory()
       : stationQueryKeys.search(debouncedText),
     queryFn: ({ signal }) =>
-      runProviderCall(() =>
-        fullDirectory
-          ? fetchAllStations(provider, signal)
-          : provider.searchStations({ text: debouncedText }, { signal }),
+      runProviderCall(
+        () =>
+          fullDirectory
+            ? fetchAllStations(provider, signal)
+            : provider.searchStations({ text: debouncedText }, { signal }),
+        networkStatus,
       ),
     // Station data is static: fresh for 5 min, cached 30 min for offline use
     // (checklist §7). See APP_CACHE_POLICY / AppDataProvider docs.

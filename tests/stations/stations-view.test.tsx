@@ -1,13 +1,16 @@
 /**
  * StationsView behaviour: search/filter through the UI, list/map toggle,
  * loading / empty / offline states, detail selection, and the mandatory
- * demo labelling (rule 6). The map area must render the DEC-012 pending
- * placeholder — no map SDK exists in this wave.
+ * demo labelling (rule 6). The map area falls back to the clearly-labelled
+ * placeholder whenever the native map cannot render — these tests force
+ * that path with `mapLibre={null}` (the map draws zero pixels in this
+ * environment; the mocked-map behaviour lives in stations-map.test.tsx).
  */
 
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { DEMO_STATIONS } from '../../src/features/stations/data/demoStations';
+import { SEARCH_QUERY_MAX_LENGTH } from '../../src/features/stations/StationsView';
 import { StationsViewHarness, makeTestStation } from './testSupport';
 
 describe('StationsView — list, search and states', () => {
@@ -88,8 +91,8 @@ describe('StationsView — list, search and states', () => {
 });
 
 describe('StationsView — list/map toggle', () => {
-  it('starts on the list and switches to the labelled map placeholder and back', async () => {
-    await render(<StationsViewHarness />);
+  it('starts on the list and switches to the labelled map fallback and back', async () => {
+    await render(<StationsViewHarness mapLibre={null} />);
 
     expect(screen.getByTestId('stations-list')).toBeTruthy();
     expect(screen.queryByTestId('stations-map-placeholder')).toBeNull();
@@ -97,12 +100,12 @@ describe('StationsView — list/map toggle', () => {
     await fireEvent.press(screen.getByTestId('stations-toggle-map'));
     expect(screen.getByTestId('stations-map-placeholder')).toBeTruthy();
     expect(screen.queryByTestId('stations-list')).toBeNull();
-    // The placeholder must state the pending human decision (DEC-012).
-    expect(screen.getByText('map SDK pending DEC-012 — human decision')).toBeTruthy();
+    // The fallback must label itself honestly (native map unavailable here).
+    expect(screen.getByText('Map unavailable in this build')).toBeTruthy();
     // And it must repeat the no-implication disclaimer (plan.md 17.5).
     expect(
       screen.getByText(
-        'A map line never implies an operational route or real-time service',
+        'Station markers show demo data only. A marker does not mean a train is running.',
       ),
     ).toBeTruthy();
 
@@ -112,7 +115,7 @@ describe('StationsView — list/map toggle', () => {
   });
 
   it('can start in map mode', async () => {
-    await render(<StationsViewHarness initialViewMode="map" />);
+    await render(<StationsViewHarness initialViewMode="map" mapLibre={null} />);
 
     expect(screen.getByTestId('stations-map-placeholder')).toBeTruthy();
     expect(screen.queryByTestId('stations-list')).toBeNull();
@@ -140,5 +143,29 @@ describe('StationsView — detail selection', () => {
     await fireEvent.press(screen.getByTestId('stations-list-row-demo-nogeom'));
 
     expect(screen.getAllByText('unknown').length).toBeGreaterThan(0);
+  });
+});
+
+describe('StationsView — search input bounds (DEC-023 W3B-L1)', () => {
+  it('bounds the search query length so oversized input never reaches the model', async () => {
+    await render(<StationsViewHarness />);
+
+    const input = screen.getByTestId('stations-search-input');
+    expect(input.props.maxLength).toBe(SEARCH_QUERY_MAX_LENGTH);
+  });
+});
+
+describe('StationsView — mapStationDiscovery gate', () => {
+  it('keeps the list as the only surface when the map feature is disabled', async () => {
+    await render(
+      <StationsViewHarness mapEnabled={false} initialViewMode="map" mapLibre={null} />,
+    );
+
+    // No map toggle at all, and map mode is impossible — the accessible
+    // list is the discovery surface (checklist 9).
+    expect(screen.queryByTestId('stations-toggle-map')).toBeNull();
+    expect(screen.queryByTestId('stations-toggle-list')).toBeNull();
+    expect(screen.queryByTestId('stations-map-placeholder')).toBeNull();
+    expect(screen.getByTestId('stations-list')).toBeTruthy();
   });
 });

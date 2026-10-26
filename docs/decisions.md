@@ -34,6 +34,11 @@ Entries follow: **ID — Title**; *Date*; *Status*; Context; Decision; Consequen
 | DEC-021 | Phase 3/4 data access layer: TanStack Query hooks over TrainDataProvider | Accepted |
 | DEC-022 | Phase 3 journey flow UI: routes, validation rules, key merge, resolver choice | Accepted |
 | DEC-023 | Phase 3 review record: findings disposition and guard hardening | Noted |
+| DEC-024 | Phase 5 record: map, favourites/recent persistence, resilience (session-restart completion) | Noted |
+| DEC-025 | Phase 5 review record: security findings fixed; store policy bugs caught by tests | Noted |
+| DEC-026 | Reviewer-qa Phase 5 delta: verdict, pinned silent-loss defect, same-day fix | Noted |
+| DEC-027 | Phase 7 hardening wave: notices surfaced, e2e smoke + a11y sweep | Noted |
+| DEC-028 | Release-readiness docs + Settings language switch closed | Noted |
 
 ---
 
@@ -1188,3 +1193,270 @@ form ✅ · validation incl. typed-value retention ✅ · unit tests for form
 validation and station filtering (through the real hook + mock provider) ✅ ·
 Cyrillic station search ✅ · typed domain models throughout ✅ · every screen
 has loading/empty/error/timeout/offline + **working** retry ✅.
+
+---
+
+## DEC-024 — Phase 5 record: map, favourites/recent persistence, resilience (session-restart completion)
+
+- **Date:** 2026-10-24
+- **Status:** Noted
+
+**Context.** Phase 5 ran three agents (map-stations, data-provider, mobile-ui)
+in parallel; a server restart **aborted all three mid-flight and swallowed
+their reports** — but most of their files had landed. The lead completed the
+seams instead of re-running the wave (work already done was not repeated).
+
+**Delivered (plan.md §9 Phase 5).**
+
+1. **Map (DEC-012):** MapLibre React Native `@maplibre/maplibre-react-native@11.5.0`
+   (+ `@types/geojson@7946.0.16`, both MIT, peers verified — note:
+   `react-native-maplibre` does NOT exist on npm, 404). Markers from the demo
+   dataset only; **required attribution rendered as untranslatable licence
+   text** (`src/features/stations/map/MapAttribution.tsx`) with
+   `map.attribution_label` as its a11y label — deliberately not run through
+   i18n, since the licensor's required wording must not change. Graceful
+   fallback to the labelled placeholder when the native module is absent
+   (Expo Go / web / tests). **Honest limits:** the map renders zero pixels in
+   this environment — a dev build (`expo prebuild`/EAS) is required and was
+   **NOT RUN** here. No route lines; markers never imply service (rule 6).
+2. **Persistence (`src/services/storage/localStore.ts`):** favourites +
+   recent searches per DEC-006 — versioned snapshot, Zod re-validation on
+   read (corrupt fields reset per-field with notices), 90-day TTL, caps
+   (20 recents / 100 favourites), dedupe, identity-idempotent adds,
+   AsyncStorage-backed + memory implementations.
+3. **Hooks:** `useFavouriteRoutes`, `useRecentSearches`, `useNetworkStatus`
+   (a **NetworkStatusPort** in the spirit of `LocationPort` — NetInfo is
+   deliberately NOT installed: native dependency we cannot test here; the
+   integration snippet is documented in code), React Query `onlineManager`
+   wired to the port, and `isStale` on `useJourneySearch` (rule-6 honest:
+   a "may be out of date" hint, never `cached-stale` provenance).
+4. **UI:** recent searches + favourites sections with per-item delete and
+   clear-all behind `ConfirmDialog` (checklist §10), "Save route" on results
+   and details (idempotent), offline banner and stale hint.
+
+**Lead completion after the restart (verified by gate runs).**
+`MemoryLocalStoreConfig` accepted the shared `persistence` seam + `flush()`
+(the restart test raced fire-and-forget writes — store logic proven correct by
+probe, test given a deterministic flush point); 20 keys merged
+(`favourites.*`, `recents.*`, `journey_results.stale_hint` — 259 keys/locale,
+all catalog guards green); `favourites/translationKeys.ts` added to the
+key-usage registries (H2 lesson applied); **global `testTimeout: 20000`**
+(DEC-020's flaky-under-load class recurred in 4 suites); the two guard suites
+now render inside `AppDataProvider` (screens legitimately need the context
+since Phase 5); `isStale` rewritten to React Query's own `isStale` after the
+purity lint rejected clock reads/setState in render/effects.
+
+**Gates (lead-run, real output):** `npm run typecheck` PASS · `npm run lint`
+0 problems · `npm run format:check` PASS · `npm test` **707 passed / 707 in 56
+suites**.
+
+**Open items.** The map-stations consolidation report never arrived with the
+restart: the `stations.*` vocabulary duplication (DEC-022 §5) and the local
+`ProvenanceBadge` (documented as a thin local renderer) remain to be
+inventoried/consolidated; unused catalog keys from the consolidation may
+remain (inventory owed). Native map behaviour, and anything device-dependent,
+remains **NOT RUN** (rules 5/8).
+
+---
+
+## DEC-025 — Phase 5 review record: security findings fixed; store policy bugs caught by tests
+
+- **Date:** 2026-10-25
+- **Status:** Noted
+
+**Context.** Wave 5 review of Phase 5. `security-privacy` completed
+(`docs/security-privacy-review-2026-10-24c.md`, threat model updated): **no
+critical/high, no secrets**; audit unchanged (5 high / 2 advisories, none new;
+12 intended new transitives from the map SDK). `reviewer-qa` was **aborted
+twice** by server restarts — its independent pass is still OWING — but its
+partial test files landed and, importantly, **pinned real defects**.
+
+**Store bugs found by the partial reviewer tests (fixed by the lead).**
+
+| Defect | Fix | Verification |
+|--------|-----|--------------|
+| **Policy eviction inverted:** `enforceSnapshotPolicy` sorted favourites oldest-first then capped — keeping the OLDEST and dropping the newest, contradicting the POLICY header ("oldest dropped first") and the `useFavouriteRoutes` contract ("most recently added first"); adds at the cap could return records the store had silently dropped | sort newest-first (createdAt tiebreaker) before capping | contract tests green |
+| **Write-vs-hydrate data loss:** a write landing before hydration finished caused `doHydrate` to discard the persisted history entirely (and the racing write persisted a truncated snapshot) | merge loaded + current records (the write wins for its own record), then re-persist to heal disk state | `localStore-contract` green |
+| **Attribution missing in the map fallback state** (DEC-012 requires it in every map state) | `MapAttribution` now renders in the fallback too | attribution-state tests green |
+
+One older test asserted the buggy eviction semantics ("the oldest favourites
+are kept"); per the rules (tests assert **intended** behavior; conflicts → the
+stricter, documented spec wins) it was corrected to the POLICY header.
+
+**Security findings disposition.**
+
+- **P5-M1 FIXED:** hostile deep-link ids can no longer crash a press handler —
+  route-boundary bounds (≤128 chars, no control characters) in
+  `journeySearchFromRouteParams`, plus `try/catch` at the `addFavourite` /
+  `recordSearch` call sites (`LocalStoreInputError` contained).
+- **P5-M2 FIXED:** the promised key-path allowlist privacy test now exists
+  (`tests/storage/localStore-privacy.test.ts` — persisted shape asserted to
+  exactly the documented fields) and the two phantom "asserted by the privacy
+  test" comments were corrected. **Deferred:** store `notices` (corruption
+  notices) are produced but not yet surfaced in UI — Phase 6 item (or downgrade
+  the DEC-007 App. B.4 "visible notice" wording at that point).
+- **P5-L3 FIXED:** stale map copy (`map.pending.*`, `map.attribution.note`)
+  rewritten now that DEC-012 is decided and the SDK installed.
+- **P5-L1/L2 DEFERRED:** assisted snapshot poisoning hardening; full-parse-
+  before-trim optimisation.
+- **W3B-L1 CLOSED** earlier (stations search input `maxLength`).
+
+**Test hygiene (flaky-under-load class, DEC-020/024).** Global
+`testTimeout: 20000` **and** `maxWorkers: '50%'` — parallel workers were the
+contention source. Two consecutive full runs green afterwards.
+
+**Gates (lead-run ×2, real output).** `npm run typecheck` PASS ·
+`npm run lint` 0 problems · `npm run format:check` PASS · `npm test`
+**752 passed / 752 in 61 suites** (twice).
+
+**Still owed.** (1) The **reviewer-qa independent pass** for Phase 5 (aborted
+twice by restarts) must run before any Phase 6/7 sign-off. (2) Store-notice
+surfacing in UI. (3) `stations.*` vocabulary consolidation inventory +
+ProvenanceBadge convergence (DEC-022 §5 / DEC-024). (4) Human items unchanged
+(translation review, CI observation, security-owner sign-off, BDZ contact).
+
+---
+
+## DEC-026 — Reviewer-qa Phase 5 delta: verdict, pinned silent-loss defect, same-day fix
+
+- **Date:** 2026-10-25
+- **Status:** Noted
+
+**Context.** The owed `reviewer-qa` pass (DEC-025 item 1) ran as a focused
+delta review after two restart-aborted attempts. It re-ran the gates
+independently (752/752 ×2 confirmed; then 755 passed + 1 skipped after its
+tests) and reviewed the Wave 6 fixes for side effects.
+
+**Verdict: PASS with one pinned defect.** The eviction fix holds across
+`favouriteRoutes`/`favouriteStations`/`recentSearches` and matches both hook
+contracts; the `doHydrate` merge survives double pre-hydration writes and
+corrupt loads, and `persist(merged)` cannot clobber newer data (write-queue
+serialization); rule-6 checks clean; all `LocalStoreInputError` call sites
+guarded. It added 3 regression tests (disk heal after merge; corrupt load +
+racing write; unsupported schemaVersion + racing write).
+
+**Pinned defect → FIXED same day.** A favourite added *before* hydration was
+numbered against the empty in-memory snapshot (`sortOrder` 0,1,…) and — when
+the loaded history had `sortOrder` gaps and sat at the cap — the merge evicted
+it as "oldest" while `addFavouriteRoute` had returned it as saved: silent
+loss, violating "oldest dropped first" and "never returns a record the store
+does not hold". Fix: the merge **rebases** racing records above the loaded
+`sortOrder` range (they are the newest actions). The reviewer's `it.skip`ped
+pin is un-skipped and green: **756 passed / 756 in 61 suites**, twice.
+
+**Noted (documented, not fixed).** Deletion-before-hydration "resurrection":
+`remove*`/`clearAll` pressed before hydration resolves are reversed by the
+merge. Practically unreachable (lists render empty pre-hydration) — recorded
+for the store's docs. Every full Jest run emits a worker-teardown warning
+("failed to exit gracefully") — runs pass; investigate with
+`--detectOpenHandles` in Phase 7 before e2e suites amplify it.
+
+**Phase 7 blockers per the review.** (a) store `notices` never surfaced in UI
+(DEC-007 App. B.4 "visible notice" unmet — implement or downgrade the
+wording); (b) e2e smoke + accessibility sweep cannot cover the map surface in
+this environment (native module renders zero pixels; device builds NOT RUN —
+rules 5/8); (c) ~~silent-loss defect~~ fixed.
+
+---
+
+## DEC-027 — Phase 7 hardening wave: notices surfaced, e2e smoke + a11y sweep
+
+- **Date:** 2026-10-25
+- **Status:** Noted
+
+**Context.** Phase 7 (plan.md §9 "test and harden") ran three parallel lanes;
+the lead integrated. This closes DEC-026 blockers (a) and the automated half
+of (b).
+
+**Delivered.**
+
+1. **Store notices surfaced (DEC-007 App. B.4 now met):** `useStoreNotices()`
+   (additive hook, newest-first, reactive via the store subscription) +
+   `StoreNoticesBanner` — newest notice only, actionable copy per every
+   `LocalStoreNoticeReason` member (compiler-enforced exhaustiveness),
+   `common.close` dismissal, `accessibilityRole="alert"` **with** `accessible`
+   set (the reviewer flagged a mid-session version lacking it; the landed
+   component is correct and the new a11y sweep pins the exposure rule).
+   Renders nothing when the store is healthy.
+2. **In-app e2e smoke** (`tests/smoke/journey-flow-e2e.test.tsx`): one
+   continuous flow through the REAL router — search form → results (rule-6
+   demo labels) → details (legs) → save route → favourites/recents → re-run
+   from favourites → results — over the real hooks, real localStore logic and
+   real mock provider. (The real `localStore` singleton is swapped for the
+   documented DEC-006 memory seam via `jest.mock`; no hook behaviour stubbed.)
+3. **Accessibility sweep** (`tests/mobile-ui/accessibility-sweep.test.tsx`):
+   walks search form, recents, favourites, results, details, station picker
+   and settings through the real router; fails with a full offender list if
+   any pressable lacks an accessible name or a state component mis-announces
+   its design-system role (progressbar+busy / alert), including driven states
+   (results error, form validation, confirm dialog).
+4. **i18n:** 8 `notices.*` keys merged by the lead (both locales; parity,
+   length, Cyrillic and claim-lexicon guards green).
+
+**Gates (lead-run, real output):** `npm run typecheck` PASS · `npm run lint`
+0 problems · `npm run format:check` PASS · `npm test` **806 passed / 806 in 65
+suites**. (Baseline accounting note: the suite count moved 756→761→806 across
+the three lanes' sessions — counts are attributed per lane in their reports.)
+
+**Deferred / NOT RUN (honest).**
+
+- Worker-teardown warning on every full Jest run ("failed to exit gracefully")
+  — benign (runs pass); prime suspect identified by static analysis: React
+  Query gc timers from `AppDataProvider`'s fallback `QueryClient` in suites
+  that never clear it. Fix or `--detectOpenHandles` bisect in the next hygiene
+  pass. Also a known expo-router modal-presentation `console.warn` for
+  deep-linked `/search/station-picker`.
+- The notices banner covers the Search/Favourites surface; the
+  `SaveRouteControl` path on results/details is not covered (one-off banner
+  design) — revisit if real providers can fail writes there.
+- Device-bound checks remain **NOT RUN** (rules 5/8): VoiceOver/TalkBack
+  announcements (the alert semantics are code-correct but unverified on
+  device), dynamic type, on-device touch targets, the native map surface, and
+  physical-device runs — `docs/voiceover-talkback-scripts.md` await a human
+  device session.
+
+---
+
+## DEC-028 — Release-readiness docs + Settings language switch closed
+
+- **Date:** 2026-10-25
+- **Status:** Noted
+
+**Context.** The docs-release wave closed the documentation half of the
+checklist's GO/NO-GO; its verification pass then exposed one real functional
+gap, which the lead fixed the same day.
+
+**Delivered (all DRAFT — human/legal approval required before anything goes
+public).**
+
+- `docs/checklist-status.md` — every checkbox in addbeforerelease.txt §1–17
+  plus the GO/NO-GO summary (17/17 sections, 171 checklist items), each with a
+  strict status, evidence pointer and honest owner (`UNASSIGNED` everywhere —
+  §17 roles have no named humans). Recorded verdict: **NO-GO for public
+  release** — the code half is green; the human/legal half (BDZ authorization,
+  ToS/privacy policy, translation review, named owners, device QA) is open.
+- `docs/store-metadata-draft.md`, `docs/privacy-labels-draft.md`,
+  `docs/release-notes-draft.md`, `CHANGELOG.md`, README refresh (it still
+  claimed "Phase 1, placeholder only" and the withdrawn 2026-10-22 audit
+  baseline). The privacy draft's "data not collected" answer is correct by
+  code facts but conditional on legal accepting the OpenFreeMap tile-traffic
+  disclosure — marked as such.
+
+**Gap found → fixed.** The Settings language switch was a "coming soon"
+placeholder (checklist §8 could not be ✅). Implemented 2026-10-25:
+`src/app/(tabs)/settings.tsx` now offers both languages in their own language
+(parity allow-list), switches via `useTranslation().setLocale`, persists via
+`settingsStorage` (verified by test), and announces selection state to screen
+readers (`Button` gained an additive `accessibilityState` pass-through — its
+existing disabled/busy state is preserved by merge).
+
+**Gates (lead-run, real output):** typecheck PASS · lint 0 problems ·
+format:check PASS · `npm test` **810 passed / 810 in 66 suites**.
+
+**Also noted.** The `github.com/Kalsito1017/BDJ` remote appears
+individual-owned (checklist §1 "company-owned accounts/repos" ⛔ — human must
+confirm or migrate to an org); the README Docker section's in-container numbers
+remain the DEC-020 historical run (435/35) with a warning that the host suite
+is now 810/66 — refresh the container run before release; large uncommitted
+work from the Phase 5/7 lanes sits in the working tree — commit hygiene is the
+human's call.

@@ -56,8 +56,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext, useState, type JSX, type ReactNode } from 'react';
 
+import {
+  networkStatusPort,
+  type NetworkStatusPort,
+} from '../services/network/networkStatus';
+import {
+  localStore as defaultLocalStore,
+  type LocalStore,
+} from '../services/storage/localStore';
 import { MockTrainDataProvider } from '../services/train-data';
 import type { TrainDataProvider } from '../services/train-data';
+import { LocalStoreProvider } from './localStoreContext';
+import { NetworkStatusProvider } from './useNetworkStatus';
 
 export interface AppDataProviderProps {
   children: ReactNode;
@@ -65,11 +75,20 @@ export interface AppDataProviderProps {
   provider?: TrainDataProvider;
   /** Defaults to `createAppQueryClient()`; tests inject their own client. */
   queryClient?: QueryClient;
+  /** Defaults to the AsyncStorage-backed singleton; tests inject a memory store. */
+  localStore?: LocalStore;
+  /** Defaults to the inferred singleton port; tests/demos inject or override. */
+  networkStatus?: NetworkStatusPort;
 }
 
 /** Cache policy constants — see the module comment above. */
 export const APP_CACHE_POLICY = {
-  /** Journey data freshness window (default for all queries). */
+  /**
+   * Journey data freshness window (default for all queries). Also the age at
+   * which `useJourneySearch().isStale` turns true ("may be out of date" hint).
+   */
+  journeyStaleTimeMs: 60_000,
+  /** Phase 3/4 name for the same window — kept so earlier callers compile. */
   staleTimeMs: 60_000,
   /** Journey cache expiry after the last observer unmounts. */
   gcTimeMs: 5 * 60_000,
@@ -97,8 +116,12 @@ export function createAppQueryClient(): QueryClient {
         // the mock (and later a rate-limited source) for nothing. Staleness
         // and the explicit `refetch` action cover refreshes.
         refetchOnWindowFocus: false,
-        // When connectivity returns, stale data is refetched (Phase 5 wires
-        // real network status into React Query's onlineManager).
+        // When confirmed connectivity returns, stale data is refetched.
+        // Phase 5: React Query's onlineManager is wired to the
+        // NetworkStatusPort CONFIRMED channel (NetworkStatusProvider /
+        // wireNetworkStatusToReactQuery) — it fires for manual/demo status and
+        // for a real source (NetInfo snippet in the port module) once one is
+        // approved and installed.
         refetchOnReconnect: true,
         // Refetch on mount only when the entry is stale (staleTime above).
         refetchOnMount: true,
@@ -129,10 +152,16 @@ export function AppDataProvider(props: AppDataProviderProps): JSX.Element {
   const [fallbackProvider] = useState(() => new MockTrainDataProvider());
   const queryClient = props.queryClient ?? fallbackQueryClient;
   const provider = props.provider ?? fallbackProvider;
+  const store = props.localStore ?? defaultLocalStore;
+  const networkStatus = props.networkStatus ?? networkStatusPort;
 
   return (
-    <TrainDataProviderContext.Provider value={provider}>
-      <QueryClientProvider client={queryClient}>{props.children}</QueryClientProvider>
-    </TrainDataProviderContext.Provider>
+    <LocalStoreProvider store={store}>
+      <NetworkStatusProvider port={networkStatus}>
+        <TrainDataProviderContext.Provider value={provider}>
+          <QueryClientProvider client={queryClient}>{props.children}</QueryClientProvider>
+        </TrainDataProviderContext.Provider>
+      </NetworkStatusProvider>
+    </LocalStoreProvider>
   );
 }

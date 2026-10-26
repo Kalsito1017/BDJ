@@ -19,12 +19,21 @@
  * `LocationPort` on top of a location module (e.g. `expo-location`:
  * `requestForegroundPermissionsAsync()` then `getCurrentPositionAsync()`),
  * keeping this screen unchanged. `expo-location` is NOT a dependency today.
+ *
+ * MAP (DEC-012, decided 2026-10-24): the map area renders MapLibre React
+ * Native against the OpenFreeMap "liberty" style — NO map API key exists.
+ * The native map needs an Expo dev build (`npx expo prebuild` / EAS Build);
+ * that build was NOT run in this workstream (Linux host, rules 5/8) and the
+ * map draws zero pixels in unit tests. Everywhere the map cannot render,
+ * the clearly-labelled MapPlaceholder shows instead (StationsMapSurface).
  */
 
 import { useMemo, useState } from 'react';
 
 import type { GeoPoint, Station } from '../../types';
+import { FEATURE_FLAG_DEFINITIONS } from '../../types/feature-flags';
 import { DEMO_STATIONS } from './data/demoStations';
+import type { MapLibreModule } from './map/loadMapLibre';
 import { searchStations } from './model/stationSearch';
 import { StationsView } from './StationsView';
 import { useStationsTranslate } from './useStationsTranslate';
@@ -55,6 +64,15 @@ export interface StationsScreenProps {
   networkStatus?: NetworkStatus;
   initialViewMode?: StationsViewMode;
   initialQuery?: string;
+  /**
+   * `mapStationDiscovery` gate: no flag runtime exists yet
+   * (src/types/feature-flags.ts is spec-only), so the committed default is
+   * used unless a caller overrides it. Flag ON is NOT a ship approval —
+   * DEC-012 + a licensed station dataset are still required (DEC-019 L8).
+   */
+  mapEnabled?: boolean;
+  /** Test seam for the MapLibre module (see map/loadMapLibre.ts). */
+  mapLibre?: MapLibreModule | null;
 }
 
 export function StationsScreen({
@@ -63,6 +81,8 @@ export function StationsScreen({
   networkStatus = 'online',
   initialViewMode = 'list',
   initialQuery = '',
+  mapEnabled = FEATURE_FLAG_DEFINITIONS.mapStationDiscovery.defaultEnabled,
+  mapLibre,
 }: StationsScreenProps) {
   const i18nTranslate = useStationsTranslate();
   const t = translate ?? i18nTranslate;
@@ -98,6 +118,8 @@ export function StationsScreen({
       onSelectStation={(station) => setSelectedStationId(station.id)}
       onCloseDetail={() => setSelectedStationId(null)}
       locationPort={locationPort}
+      mapEnabled={mapEnabled}
+      mapLibre={mapLibre}
     />
   );
 }

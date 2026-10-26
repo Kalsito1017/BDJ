@@ -15,6 +15,7 @@ export { ErrorState, type ErrorStateProps } from './ErrorState';
 export { ListSkeleton, type ListSkeletonProps } from './ListSkeleton';
 export { Loader, type LoaderProps } from './Loader';
 export { OfflineState, type OfflineStateProps } from './OfflineState';
+export { OfflineBanner, type OfflineBannerProps } from './OfflineBanner';
 export { PlaceholderScreen, type PlaceholderScreenProps } from './PlaceholderScreen';
 export { ProvenanceBadge, type ProvenanceBadgeProps } from './ProvenanceBadge';
 export {

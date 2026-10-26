@@ -5,8 +5,14 @@
  * contract: `from`, `to`, `date`), fetches through the shared hooks contract
  * (src/hooks — data-provider workstream, NOT owned here):
  *   useJourneySearch(input | null) -> { result, journeys, isLoading, isError,
- *     error, refetch, isFetching, dataUpdatedAt }
+ *     error, refetch, isFetching, dataUpdatedAt, isStale }
  *   useStationSearch('')          -> full demo directory (name resolution)
+ *
+ * Phase 5 additions (plan.md §9 Phase 5, resilience + saved items):
+ *   useNetworkStatus()  -> offline banner (with a REAL refetch retry);
+ *   `isStale`           -> "may be out of date" hint (informational copy,
+ *                          never provenance — rule 6);
+ *   SaveRouteControl    -> "Save this route" (route shortcut, NOT a ticket).
  *
  * Honesty rules: `dataUpdatedAt` renders as "results loaded at HH:mm" (query
  * cache freshness — never data provenance); every journey renders its own
@@ -17,11 +23,12 @@
 import { useMemo } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import { RequestErrorState } from '../../components';
+import { OfflineBanner, RequestErrorState } from '../../components';
 import { formatDateInSofia, formatTimeInSofia, useTranslation } from '../../i18n';
-import { useJourneySearch, useStationSearch } from '../../hooks';
+import { useJourneySearch, useNetworkStatus, useStationSearch } from '../../hooks';
 import type { JourneySearch } from '../../types/journey';
 import type { Station } from '../../types/station';
+import { SaveRouteControl } from '../favourites';
 
 import { JourneyResultsView } from './JourneyResultsView';
 import { JOURNEY_KEYS } from './translationKeys';
@@ -64,8 +71,17 @@ export function JourneyResultsScreen({ testID }: JourneyResultsScreenProps) {
     [fromStationId, toStationId, date],
   );
 
-  const { journeys, isLoading, isError, error, refetch, isFetching, dataUpdatedAt } =
-    useJourneySearch(input);
+  const {
+    journeys,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+    dataUpdatedAt,
+    isStale,
+  } = useJourneySearch(input);
+  const { isOnline } = useNetworkStatus();
   const { stations } = useStationSearch('');
   const nameFor = useMemo(
     () => stationNameLookup(stations, t(JOURNEY_KEYS.unknown)),
@@ -95,6 +111,20 @@ export function JourneyResultsScreen({ testID }: JourneyResultsScreenProps) {
       error={isError ? error : null}
       fetchedAtTime={fetchedAtTime}
       fromName={nameFor(input.fromStationId)}
+      headerExtras={
+        <>
+          <OfflineBanner
+            onRetry={() => void refetch()}
+            testID="screen-search-results-offline-banner"
+            visible={!isOnline}
+          />
+          <SaveRouteControl
+            fromStationId={input.fromStationId}
+            testID="screen-search-results-save-route"
+            toStationId={input.toStationId}
+          />
+        </>
+      }
       journeys={journeys}
       loading={isLoading}
       onChangeSearch={() => router.back()}
@@ -104,6 +134,7 @@ export function JourneyResultsScreen({ testID }: JourneyResultsScreenProps) {
         router.push({ pathname: '/journey/[id]', params: { id: journey.id } })
       }
       refreshing={isFetching}
+      stale={isStale}
       t={t}
       testID={testID ?? 'screen-search-results'}
       toName={nameFor(input.toStationId)}
