@@ -62,13 +62,16 @@ jobs:
     name: dependency audit (advisory)
     runs-on: ubuntu-latest
     continue-on-error: true
-    # continue-on-error is TEMPORARY and must stay visible. Re-verified
-    # 2026-11-17 (DEC-030): 78 findings (65 high / 13 moderate) after the
-    # node-forge 1.4.3 override. Remaining high roots are tooling-only:
-    # picomatch GHSA-fc5q-39xc-vjpf (no patched version exists) and nested zod
-    # in @expo/cli. `npm audit fix --force` proposes Expo 52/Jest 29/RN 0.83
-    # downgrades and does not fix picomatch. The security owner decides when
-    # this job becomes required / adopts a dated audit-diff allowlist.
+    # continue-on-error is TEMPORARY and must stay visible. `npm run
+    # audit:deps` is the dated audit-diff gate (DEC-031): it fails on any new
+    # high/critical root and on expired exceptions; known no-fix roots
+    # (picomatch GHSA-fc5q-39xc-vjpf, nested zod in @expo/cli) are
+    # allow-listed until 2026-12-31 with owner and reason. Critical findings
+    # are never allow-listable. Re-verified 2026-11-17 (DEC-030): 78 findings
+    # (65 high / 13 moderate) after the node-forge 1.4.3 override. The
+    # security owner decides when this job becomes required; do not silently
+    # delete it, and never run `npm audit fix --force` (it proposes Expo 52/
+    # Jest 29/RN 0.83 downgrades and does not fix picomatch).
     steps:
       - uses: actions/checkout@v7
 

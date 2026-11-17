@@ -41,6 +41,7 @@ Entries follow: **ID — Title**; *Date*; *Status*; Context; Decision; Consequen
 | DEC-028 | Release-readiness docs + Settings language switch closed | Noted |
 | DEC-029 | Gate reproducibility: expired test date, suite budgets, QueryClient teardown | Noted |
 | DEC-030 | Dependency audit: node-forge patched; picomatch has no fix | Noted |
+| DEC-031 | Dependency-audit gate with dated allowlist (human-approved) | Accepted |
 
 ---
 
@@ -1584,3 +1585,50 @@ upstream `picomatch` patch ships, or when the **human security owner** approves
 a dated audit-diff allowlist (the DEC-019-recommended approach: fail on new
 root advisories, allow-list known no-fix roots with an expiry and review date).
 That approval is **UNASSIGNED** and not given by this record.
+
+---
+
+## DEC-031 — Dependency-audit gate with dated allowlist (human-approved)
+
+- **Date:** 2026-11-17
+- **Status:** Accepted
+
+**Context.** DEC-030 left the CI advisory job permanently red: `picomatch` has
+no patched version, and the nested `zod` fix requires an untestable native
+toolchain upgrade. A check that is always red is noise; DEC-019 already
+recommended an **audit-diff gate that fails only on new advisories**.
+
+**Decision (approved by the human repo owner on 2026-11-17).**
+
+- `npm run audit:deps` now runs `node scripts/audit-gate.mjs` (no new
+  dependencies). It fails on any **high/critical root advisory** that is not
+  allow-listed, and on any expired entry. Moderate/low findings are reported
+  but do not fail the gate. **Critical advisories are never allow-listable.**
+- `scripts/audit-allowlist.json` contains two entries, each with a reason, an
+  owner (repo owner, human, approved 2026-11-17) and an expiry of
+  **2026-12-31**:
+  - `GHSA-fc5q-39xc-vjpf` / `picomatch` — no patched version (≤4.0.7);
+    dev/build tooling only, no `src/` import, not in the app bundle.
+  - `GHSA-mrhx-c7xc-m3w5` / `zod` — only the nested `@expo/cli` build-tooling
+    copy; the app's direct `zod@4.6.7` is patched.
+- `npm run audit:raw` keeps the raw `npm audit --audit-level=high` output for
+  inspection. The CI `dependency-audit` job remains **advisory**
+  (`continue-on-error: true`) until the security owner makes it required.
+- The gate has a built-in self-test (`--self-test`) covering clean,
+  allow-listed, expired, unknown-advisory, package-mismatch and
+  critical-never-allowed cases; it runs in Jest
+  (`tests/scripts/audit-gate.test.ts`).
+
+**Verified output.**
+
+- `npm run audit:deps` → `78 findings (65 high, 13 moderate, 0 critical)`;
+  both roots allow-listed; **Audit gate: PASS**.
+- `npm test` → **811 passed / 811 in 67 suites** (196.41 s); typecheck, lint
+  and format PASS.
+
+**Consequences.** The advisory check is green with explicit, reviewable
+exceptions and fails on any new high/critical root. The 2026-12-31 expiry
+forces re-review; if upstream patches `picomatch` or the CLI is upgraded, the
+entry must be removed. This is **not** a security-owner sign-off for release:
+the human security-owner role remains UNASSIGNED (checklist §17), and the
+advisory job is still non-blocking.

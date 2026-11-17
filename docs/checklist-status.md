@@ -27,9 +27,9 @@ evidence pointer, and the human owner the checklist demands.
 (see section 17). Where a role is required, it is named in brackets. No item
 below has a named human owner today.
 
-**Headline gate numbers (agent-run, 2026-11-17, DEC-029 — must be re-run before
+**Headline gate numbers (agent-run, 2026-11-17, DEC-031 — must be re-run before
 release):** `npm run typecheck` PASS · `npm run lint` 0 problems ·
-`npm run format:check` PASS · `npm test` **810 passed / 810 in 66 suites**.
+`npm run format:check` PASS · `npm test` **811 passed / 811 in 67 suites**.
 
 ---
 
@@ -125,7 +125,7 @@ All rows: UNASSIGNED [product owner + legal + backend].
 | Secrets out of code/repo/Git history/.env; rotate anything pasted | ✅ | Full-tree + history + git-config scans clean (DEC-014, DEC-019, DEC-023, DEC-025: "no secrets anywhere"); nothing to rotate | UNASSIGNED [security] |
 | `EXPO_PUBLIC_*` and map SDK keys are PUBLIC; restrict map keys by bundle ID | ✅ | Documented in README + `.env.example`; no map API key exists at all (DEC-012: keyless OpenFreeMap) | UNASSIGNED [security] |
 | Verify every package exists and is intended (typosquatting); lockfile committed; no unreviewed churn | ✅ | DEC-009 policy; registry-verified installs incl. the `react-native-maplibre` 404 catch (DEC-024); `package-lock.json` committed | UNASSIGNED |
-| Dependency and vulnerability scanning in CI | 🟡 | `dependency-audit` CI job exists but is **advisory**. Re-verified 2026-11-17: **78 findings — 65 high / 13 moderate** (DEC-030). `node-forge` patched to 1.4.3 via override; the remaining high roots are `picomatch` GHSA-fc5q-39xc-vjpf (**no patched version exists**) and nested `zod` in the Expo build CLI — both tooling-only and absent from the app bundle. The quality job is green; the advisory job stays red until an upstream patch or a dated allowlist approved by the security owner (UNASSIGNED). `npm audit fix --force` forbidden | UNASSIGNED [security] |
+| Dependency and vulnerability scanning in CI | 🟡 | `dependency-audit` CI job runs `npm run audit:deps`, a **dated audit-diff gate** (DEC-031). Re-verified 2026-11-17: **78 findings — 65 high / 13 moderate** (DEC-030); `node-forge` patched to 1.4.3, and the two remaining high roots (`picomatch` GHSA-fc5q-39xc-vjpf — no patched version; nested `zod` in the Expo build CLI) are tooling-only and allow-listed until **2026-12-31** with owner/reason. A new high/critical root fails the gate; critical is never allow-listable. Job remains advisory until the security owner makes it required. `npm audit fix --force` forbidden | UNASSIGNED [security] |
 | Input sanitization everywhere user/provider can send data | 🟡 | Zod boundary schemas **with `.max()` bounds** (DEC-017, DEC-019 W3-M1), route-boundary id length/control-char bounds (DEC-025 P5-M1 / W3B-M1), store input validation with tests. No known unbounded boundary input as of 2026-11-17 | UNASSIGNED [security] |
 | OWASP protection (MASVS mobile / API Top 10 backend) | 🟡 | Input/validation/claim guards and a threat model exist; **no formal MASVS assessment or penetration test has been run**; API Top 10 N/A (no backend) | UNASSIGNED [security] |
 | File uploads scanned/size-limited (if any) | 📌 | No file uploads exist | UNASSIGNED [security] |
@@ -164,7 +164,7 @@ All rows: UNASSIGNED [legal (BG/EU) + security/compliance owner].
 
 | Item | Status | Evidence | Owner |
 |------|--------|----------|-------|
-| TypeScript strict mode, ESLint, Prettier; readable code | ✅ | `tsconfig.json` strict; gates green 2026-11-17 (DEC-029); `npm run lint` 0 problems | UNASSIGNED [tech lead] |
+| TypeScript strict mode, ESLint, Prettier; readable code | ✅ | `tsconfig.json` strict; gates green 2026-11-17 (DEC-031); `npm run lint` 0 problems | UNASSIGNED [tech lead] |
 | Runtime validation (Zod) of all provider/API responses | ✅ | DEC-017 schemas parse every external payload before mapping; `tests/data-provider/schemas.test.ts` (malformed payloads rejected as `invalid_response`) | UNASSIGNED |
 | Empty, loading, error, offline, timeout and retry states on EVERY screen | ✅ | DEC-023 acceptance criteria; `tests/mobile-ui/states.test.tsx`, `request-error-state.test.tsx`, `resilience.test.tsx`, `journey-results.test.tsx`. Agent-verified in Jest only | UNASSIGNED [QA] |
 | Error messages a user can act on | ✅ | `ProviderError` → localized actionable messages (DEC-007); both locales (catalog guards green) | UNASSIGNED |
@@ -268,11 +268,12 @@ UNASSIGNED [DevOps] unless noted.
 
 ## 14. TESTING
 
-Baseline (agent-run, 2026-11-17, DEC-029): **810 tests / 66 suites, all
+Baseline (agent-run, 2026-11-17, DEC-031): **811 tests / 67 suites, all
 passing** — re-run before release. The 2026-10-25 baseline was not
 reproducible: an expired hard-coded travel date and load-sensitive 20 s
 timeouts caused runs of 803/810 and 802/810; both causes are fixed and two
-consecutive full runs are green (DEC-029). Owner: UNASSIGNED [QA] unless noted.
+consecutive full runs are green (DEC-029). The suite grew by one self-test for
+the dependency-audit gate (DEC-031). Owner: UNASSIGNED [QA] unless noted.
 
 | Item | Status | Evidence | Owner |
 |------|--------|----------|-------|
@@ -296,7 +297,7 @@ consecutive full runs are green (DEC-029). Owner: UNASSIGNED [QA] unless noted.
 | Branching strategy; protected main; required checks | ⛔ | Repo exists on GitHub; branch protection/required checks **unverified** (no agent can see repo settings; CI runs unobserved) | UNASSIGNED [tech lead + DevOps] |
 | Delete dead code and abandoned attempts | 🟡 | Cleanups happened across waves; known leftovers tracked (DEC-019 stale `PENDING_KEYS` list, DEC-024 unused catalog keys inventory) | UNASSIGNED [tech lead] |
 | Split oversized files; no 2,000-line append-only files | ✅ | Largest source file is 829 lines (`tests/storage/localStore-contract.test.ts`); largest src file 812 (`src/services/storage/localStore.ts`) — verified 2026-10-25 with `wc -l` | UNASSIGNED |
-| Architecture decisions recorded with reasons (`docs/decisions.md`) | ✅ | DEC-001 … DEC-029, continuously updated | UNASSIGNED |
+| Architecture decisions recorded with reasons (`docs/decisions.md`) | ✅ | DEC-001 … DEC-031, continuously updated | UNASSIGNED |
 | README: prerequisites, setup, env vars, tests, builds; runnable in under an hour | 🟡 | README covers all required sections (refreshed 2026-10-25); "under an hour" has **never been measured with a new engineer** | UNASSIGNED [tech lead] |
 | Regular dependency/framework upgrades; Expo SDK upgrade plan before EOL | 📌 | No upgrade plan document; dependency audit advisory only (§5) | UNASSIGNED [mobile + DevOps] |
 | Bus factor above one: two people can build, release, operate | ⛔ | **Zero humans are currently able to build/release** (no named owners; iOS builds require macOS/EAS credentials nobody holds) | UNASSIGNED [tech lead] |
@@ -352,8 +353,8 @@ Per `addbeforerelease.txt`:
 | 15 Code health | ⛔ NO-GO | Human code review, protected main, bus factor, signing-key policy |
 
 **Verdict: NO-GO for public release as of 2026-10-25** (code re-verified
-2026-11-17, DEC-029). The code half is in good shape (gates green: 810 tests /
-66 suites); the human/legal half (authorization, legal review, named owners,
+2026-11-17, DEC-031). The code half is in good shape (gates green: 811 tests /
+67 suites); the human/legal half (authorization, legal review, named owners,
 device QA) is entirely open.
 
 **In-app ticket sales — additionally needs sections 3, 4 and written BDZ

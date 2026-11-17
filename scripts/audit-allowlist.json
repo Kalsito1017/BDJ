@@ -1,0 +1,21 @@
+{
+  "$comment": "Dated exceptions for scripts/audit-gate.mjs (DEC-031). Each entry must name a human-approved no-fix root advisory. Expired entries fail the gate. Do not add an entry without a reason, an owner and an expiry; never allow-list a critical advisory.",
+  "reviewedAt": "2026-11-17",
+  "nextReview": "2026-12-31",
+  "entries": [
+    {
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch",
+      "reason": "No patched version exists (affected <= 4.0.7; latest is 4.0.7). Dev/build tooling only: no src/ import and not in the app bundle; exploitation requires attacker-controlled glob patterns in Jest/Metro/Expo. Re-check monthly and remove once upstream patches.",
+      "owner": "repo owner (human), approved 2026-11-17",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-mrhx-c7xc-m3w5",
+      "package": "zod",
+      "reason": "Only the nested @expo/cli@58.1.14 -> zod@3.25.76 build-tooling copy; the app's direct zod@4.6.7 is patched. The CLI upgrade that fixes it (@expo/cli@58.1.21) pulls the native-backed noxcturnal toolchain, which cannot be build-tested in this environment. Revisit with a device/build runner.",
+      "owner": "repo owner (human), approved 2026-11-17",
+      "expires": "2026-12-31"
+    }
+  ]
+}

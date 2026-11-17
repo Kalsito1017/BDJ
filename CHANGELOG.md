@@ -81,12 +81,14 @@ decision log.
 
 - No secrets found anywhere (working tree, full Git history, git config — scans
   recorded in `docs/security-privacy-review-*.md`); nothing to rotate.
-- Dependency audit (2026-11-17, DEC-030): `node-forge` patched to 1.4.3 via
-  an npm override. Remaining high findings are tooling-only and have no safe
-  fix today — `picomatch` GHSA-fc5q-39xc-vjpf (affected ≤4.0.7, patched: none)
-  and nested `zod` in Expo CLI. `npm audit fix --force` is forbidden
-  (DEC-019); the advisory CI job stays visibly red until an upstream patch or
-  a human-approved dated allowlist.
+- Dependency audit (2026-11-17, DEC-030/DEC-031): `node-forge` patched to
+  1.4.3 via an npm override. The two remaining high roots are tooling-only and
+  have no safe fix today — `picomatch` GHSA-fc5q-39xc-vjpf (affected ≤4.0.7,
+  patched: none) and nested `zod` in Expo CLI. They are allow-listed with
+  owner/reason until **2026-12-31** by the new audit-diff gate
+  (`scripts/audit-gate.mjs`), which fails on any new high/critical root and
+  never allow-lists critical findings. `npm audit fix --force` is forbidden
+  (DEC-019).
 - Threat model (`docs/threat-model.md`) written and kept current.
 
 ### Known limitations (honest)

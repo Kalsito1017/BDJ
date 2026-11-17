@@ -21,7 +21,7 @@ human/legal items outstanding) and `CHANGELOG.md` for what changed per phase.
 | CI | **Human-observed 2026-11-17** (commit `b6ccea0`): the quality job (`install, typecheck, lint, test`) **passed in ~2 min**; the advisory `dependency-audit` job **failed** on the `picomatch` no-fix advisory (DEC-030); Android/iOS placeholder jobs were skipped by design. No agent has seen the raw log — the status comes from the human-supplied Actions screenshot. |
 | iOS / Android builds | **NOT RUN** in this environment (Linux). See [Building](#building). |
 | Store submission | Not started. Drafts only: `docs/store-metadata-draft.md`, `docs/privacy-labels-draft.md`, `docs/release-notes-draft.md` (all require human/legal approval). |
-| Tests | **810 tests / 66 suites, gates green 2026-11-17** (`npm run typecheck` PASS, `npm run lint` 0 problems, `npm run format:check` PASS — DEC-029). Must be re-run before release. Device testing **NOT RUN**. |
+| Tests | **811 tests / 67 suites, gates green 2026-11-17** (`npm run typecheck` PASS, `npm run lint` 0 problems, `npm run format:check` PASS — DEC-031). Must be re-run before release. Device testing **NOT RUN**. |
 | Product name | "BDZ Train Companion" is a **working name, UNCONFIRMED** (`review.common.app_name` in the locale catalogs). |
 | Release readiness | **NO-GO for public release** — see `docs/checklist-status.md` (authorization, legal review, translation review, named human owners all open). |
 
@@ -62,14 +62,19 @@ npm test              # jest (jest-expo preset)
 npm run test:ci       # jest --ci (used by CI)
 npm run format        # prettier --write .
 npm run format:check  # prettier --check .
-npm run audit:deps    # npm audit --audit-level=high (dependency gate)
+npm run audit:deps    # dated audit-diff gate (fails on new high/critical roots)
+npm run audit:raw     # raw npm audit --audit-level=high output
 ```
 
 ### Dependency audit
 
-`npm run audit:deps` runs `npm audit --audit-level=high` and exits non-zero on
-high/critical advisories. It also runs in CI as an advisory job
-(`dependency-audit`, non-blocking for now — see the comment in the workflow).
+`npm run audit:deps` runs `scripts/audit-gate.mjs`, a dated audit-diff gate: it
+fails on any **new high/critical root advisory**, while known no-fix roots are
+allow-listed with an owner, reason and expiry
+(`scripts/audit-allowlist.json`, DEC-031). Critical advisories are never
+allow-listable. `npm run audit:raw` still prints the raw
+`npm audit --audit-level=high` output. The gate runs in CI as an advisory job
+(`dependency-audit`, non-blocking for now — see the workflow comment).
 
 **Known advisories (re-verified 2026-11-17, `npm audit --json` — DEC-030):**
 **78 findings — 65 high / 13 moderate / 0 critical**. `node-forge` was patched
@@ -88,9 +93,10 @@ bundle**:
 
 Moderate `glob`/`minimatch` findings are also tooling-only. **Do not run
 `npm audit fix --force`**: it proposes Expo 52 / Jest 29 / React Native 0.83
-downgrades and does not fix `picomatch`. The CI advisory job stays visibly red
-until an upstream patch ships or the human security owner approves a dated
-audit-diff allowlist (DEC-030); the quality gate is green.
+downgrades and does not fix `picomatch`. The two remaining high roots are
+allow-listed until **2026-12-31** with a documented owner and reason (DEC-031);
+the gate fails on any new high/critical root, so this is not a blanket
+suppression. The quality gate is green.
 
 ## Environment variables
 
@@ -115,7 +121,7 @@ See `.env.example`. Rules (plan.md §7, addbeforerelease.txt §5):
 - Tests live in `tests/` (unit, component, integration against the mock
   provider, plus in-app e2e smoke and an accessibility sweep); shared setup in
   `src/test/`.
-- Current coverage: **810 tests / 66 suites, all passing (2026-11-17, DEC-029)**
+- Current coverage: **811 tests / 67 suites, all passing (2026-11-17, DEC-031)**
   — re-run before release. This is a Jest/Node environment result; it is **not**
   device testing.
 - Physical-device testing (Android + iOS) is required before release
@@ -239,7 +245,7 @@ scripts/        repo tooling scripts (none yet)
 
 - `docs/checklist-status.md` — status of **every** `addbeforerelease.txt`
   checklist item (sections 1–17 + GO/NO-GO) with evidence and owners.
-- `docs/decisions.md` — architecture decision log (DEC-001 … DEC-029).
+- `docs/decisions.md` — architecture decision log (DEC-001 … DEC-031).
 - `docs/release-notes-draft.md` — 0.1.0 release notes (**draft**).
 - `docs/store-metadata-draft.md` — app-store listing metadata (**draft**).
 - `docs/privacy-labels-draft.md` — App Store privacy labels / Play data safety
@@ -263,10 +269,14 @@ public.
 3. Android and iOS build **placeholder** jobs — disabled, never run, exit
    non-zero by design until a human configures a real build path + signing secrets.
 
-CI status is **UNVERIFIED**: the repository was pushed to GitHub on 2026-10-22,
-which may have triggered runs, but no agent has seen any run or its output.
-Check the Actions tab before trusting CI. All credentials belong in GitHub
-Actions secret storage; none are needed for the quality job.
+CI status (human-observed 2026-11-17, commit `b6ccea0`): the **quality job
+passed** (`npm ci`, typecheck, lint, format, tests — ~2 min). The advisory
+`dependency-audit` job failed on that run because the audit gate did not exist
+yet; DEC-030/DEC-031 now patch `node-forge` and add the dated gate, so the next
+push should turn it green without hiding new advisories. Android/iOS
+placeholders are skipped by design. The raw log has not been reviewed by an
+agent; confirm the next run in the Actions tab. All credentials belong in
+GitHub Actions secret storage; none are needed for the quality job.
 
 ## Security and compliance notes
 

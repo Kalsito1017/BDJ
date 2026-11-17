@@ -15,7 +15,8 @@
     "format:check": "prettier --check .",
     "test": "jest",
     "test:ci": "jest --ci",
-    "audit:deps": "npm audit --audit-level=high"
+    "audit:deps": "node scripts/audit-gate.mjs",
+    "audit:raw": "npm audit --audit-level=high"
   },
   "engines": {
     "node": "^22.13.0 || ^24.3.0 || ^26.0.0"
