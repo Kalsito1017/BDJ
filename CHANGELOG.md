@@ -81,10 +81,12 @@ decision log.
 
 - No secrets found anywhere (working tree, full Git history, git config — scans
   recorded in `docs/security-privacy-review-*.md`); nothing to rotate.
-- Dependency audit baseline: 5 high-severity findings from 2 transitive
-  advisories (`node-forge`, nested `zod@3` in Expo CLI tooling), no patched
-  versions available for `node-forge`; `npm audit fix --force` is forbidden
-  (DEC-019). Re-baselining the CI audit gate is a security-owner task.
+- Dependency audit (2026-11-17, DEC-030): `node-forge` patched to 1.4.3 via
+  an npm override. Remaining high findings are tooling-only and have no safe
+  fix today — `picomatch` GHSA-fc5q-39xc-vjpf (affected ≤4.0.7, patched: none)
+  and nested `zod` in Expo CLI. `npm audit fix --force` is forbidden
+  (DEC-019); the advisory CI job stays visibly red until an upstream patch or
+  a human-approved dated allowlist.
 - Threat model (`docs/threat-model.md`) written and kept current.
 
 ### Known limitations (honest)

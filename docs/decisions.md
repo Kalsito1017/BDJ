@@ -40,6 +40,7 @@ Entries follow: **ID — Title**; *Date*; *Status*; Context; Decision; Consequen
 | DEC-027 | Phase 7 hardening wave: notices surfaced, e2e smoke + a11y sweep | Noted |
 | DEC-028 | Release-readiness docs + Settings language switch closed | Noted |
 | DEC-029 | Gate reproducibility: expired test date, suite budgets, QueryClient teardown | Noted |
+| DEC-030 | Dependency audit: node-forge patched; picomatch has no fix | Noted |
 
 ---
 
@@ -1534,3 +1535,52 @@ failed) and **802/810** (5 suites failed). The human reports CI is **RED**
   findings, 3 high — README updated, security-owner decision).
 - Device/emulator testing remains NOT RUN.
 - RNTL deprecated 2nd-argument `findBy*` timeout warnings remain (cosmetic).
+
+---
+
+## DEC-030 — Dependency audit: node-forge patched; picomatch has no fix
+
+- **Date:** 2026-11-17
+- **Status:** Noted
+
+**Context.** The CI advisory job failed on the first observed run of
+`b6ccea0` (quality job **green in 2 min**). `npm audit` had moved from 34
+findings (3 high) earlier the same day to **79 (66 high / 13 moderate)** after
+a new `picomatch` advisory was reviewed upstream. The audit is a live dataset;
+counts must always be tied to a timestamp.
+
+**Safe fix applied.**
+
+- Added an npm override `"node-forge": "1.4.3"` (`@expo/cli` requires
+  `^1.4.0`; 1.4.3 is a patch that clears GHSA-86w9-cpqp-85rv and the related
+  Forge advisories). Lockfile delta: 6 lines. After: **78 findings — 65 high /
+  13 moderate / 0 critical**. Full suite re-run: **810/810 in 66 suites**.
+
+**Deliberately not applied.**
+
+- `npm audit fix --force` proposes **Expo 52 / Jest 29 / React Native 0.83**
+  downgrades (semver-major, outside the SDK 58 line) and would **not** fix
+  `picomatch`. Forbidden by DEC-019.
+- `@expo/cli@58.1.21` would move the nested `zod` to 4.x (clearing that root),
+  but it drags in `@expo/metro-config@58.0.23` and the new native-backed
+  `noxcturnal` toolchain package. There is no Metro/native build environment
+  here to validate that change; revisit with a device/build runner.
+
+**Remaining high roots (both tooling-only).**
+
+- `picomatch` **GHSA-fc5q-39xc-vjpf**: affected **≤ 4.0.7**, **patched: none**
+  (latest is 4.0.7). Cascades through Jest/Metro/Expo. No `src/` import; not in
+  the app bundle. Exploitation needs attacker-controlled glob patterns in the
+  dev/build toolchain, not a user-facing path.
+- `zod` **GHSA-mrhx-c7xc-m3w5**: only the nested
+  `@expo/cli@58.1.14 → zod@3.25.76`; the app's direct `zod@4.6.7` is patched.
+  Build tooling only.
+
+Moderate `glob`/`minimatch` findings are likewise tooling-only.
+
+**Consequences.** The quality gate is green; the **advisory job stays visibly
+red by design** — it is not silently ignored. It can only go green when an
+upstream `picomatch` patch ships, or when the **human security owner** approves
+a dated audit-diff allowlist (the DEC-019-recommended approach: fail on new
+root advisories, allow-list known no-fix roots with an expiry and review date).
+That approval is **UNASSIGNED** and not given by this record.

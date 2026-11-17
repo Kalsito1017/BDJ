@@ -18,7 +18,7 @@ human/legal items outstanding) and `CHANGELOG.md` for what changed per phase.
 | In-app ticket sales | **Disabled** (feature flag `ticketSales` OFF, mock provider only) until written BDZ authorization and a supported integration exist (DEC-004, plan.md 17.1). |
 | Payment card data | Never collected, stored or logged — by design; provider-hosted checkout only (plan.md 17.3). |
 | Capacity ("1,000,000 concurrent users") | **No such claim.** Load test not run (DEC-011, `docs/scale-and-load-test-plan.md`). |
-| CI | Workflow exists (`.github/workflows/ci.yml`). The **human reports the run is RED (2026-11-17); no agent has observed the log**. The reproduced causes (expired test date, load-sensitive timeouts) are fixed in DEC-029 and `format:check` was added to the job — **CI is not claimed green until a human observes a passing run**. |
+| CI | **Human-observed 2026-11-17** (commit `b6ccea0`): the quality job (`install, typecheck, lint, test`) **passed in ~2 min**; the advisory `dependency-audit` job **failed** on the `picomatch` no-fix advisory (DEC-030); Android/iOS placeholder jobs were skipped by design. No agent has seen the raw log — the status comes from the human-supplied Actions screenshot. |
 | iOS / Android builds | **NOT RUN** in this environment (Linux). See [Building](#building). |
 | Store submission | Not started. Drafts only: `docs/store-metadata-draft.md`, `docs/privacy-labels-draft.md`, `docs/release-notes-draft.md` (all require human/legal approval). |
 | Tests | **810 tests / 66 suites, gates green 2026-11-17** (`npm run typecheck` PASS, `npm run lint` 0 problems, `npm run format:check` PASS — DEC-029). Must be re-run before release. Device testing **NOT RUN**. |
@@ -71,16 +71,26 @@ npm run audit:deps    # npm audit --audit-level=high (dependency gate)
 high/critical advisories. It also runs in CI as an advisory job
 (`dependency-audit`, non-blocking for now — see the comment in the workflow).
 
-**Known advisories (re-verified 2026-11-17, `npm audit --json`):** 34 findings
-— **3 high, 31 moderate**. High: `node-forge` (transitive via
-`@expo/code-signing-certificates`; a long list of upstream advisories), the
-`@expo/cli` chain, and a `zod` advisory (GHSA-mrhx-c7xc-m3w5) that affects only
-the nested `zod@3.25.76` build tooling — the app's direct `zod@4.6.7` is
-patched. The 2026-10-24 baseline (5 high / 2 advisories) is **stale**.
-`npm audit fix --dry-run` now proposes large churn (+43 / −132 / ~67 changed
-packages), which is **not** a reviewed fix and must not be applied blind.
-Re-baselining the CI audit gate is a decision for the security owner
-(UNASSIGNED); **never** run `npm audit fix --force`.
+**Known advisories (re-verified 2026-11-17, `npm audit --json` — DEC-030):**
+**78 findings — 65 high / 13 moderate / 0 critical**. `node-forge` was patched
+to 1.4.3 through an npm override (was 1.4.0; the `@expo/cli` range is
+`^1.4.0`), which removed that high root. The remaining high findings are two
+roots, both **build/dev tooling, not imported by `src/` and not in the app
+bundle**:
+
+- `picomatch` **GHSA-fc5q-39xc-vjpf** — affected **≤ 4.0.7**, patched versions:
+  **none** (latest is 4.0.7). It cascades through Jest/Metro/Expo. No safe
+  upgrade exists today.
+- `zod` **GHSA-mrhx-c7xc-m3w5** — only the nested `@expo/cli@58.1.14`
+  `zod@3.25.76`; the app's direct `zod@4.6.7` is patched. The CLI fix is
+  `@expo/cli@58.1.21`, which pulls a new native Metro toolchain package
+  (`noxcturnal`) that cannot be build-tested in this environment — deferred.
+
+Moderate `glob`/`minimatch` findings are also tooling-only. **Do not run
+`npm audit fix --force`**: it proposes Expo 52 / Jest 29 / React Native 0.83
+downgrades and does not fix `picomatch`. The CI advisory job stays visibly red
+until an upstream patch ships or the human security owner approves a dated
+audit-diff allowlist (DEC-030); the quality gate is green.
 
 ## Environment variables
 

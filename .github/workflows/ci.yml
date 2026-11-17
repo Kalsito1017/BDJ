@@ -63,11 +63,12 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     # continue-on-error is TEMPORARY and must stay visible. Re-verified
-    # 2026-11-17: 34 findings (3 high / 31 moderate) via the Expo/RN/Jest
-    # toolchain (node-forge, @expo/cli, nested zod). `npm audit fix` offers a
-    # fix only with large churn (+43/−132/~67 packages) which is NOT reviewed;
-    # the security owner (addbeforerelease.txt §17) decides when this job
-    # becomes required. Do not silently delete it.
+    # 2026-11-17 (DEC-030): 78 findings (65 high / 13 moderate) after the
+    # node-forge 1.4.3 override. Remaining high roots are tooling-only:
+    # picomatch GHSA-fc5q-39xc-vjpf (no patched version exists) and nested zod
+    # in @expo/cli. `npm audit fix --force` proposes Expo 52/Jest 29/RN 0.83
+    # downgrades and does not fix picomatch. The security owner decides when
+    # this job becomes required / adopts a dated audit-diff allowlist.
     steps:
       - uses: actions/checkout@v7
 
