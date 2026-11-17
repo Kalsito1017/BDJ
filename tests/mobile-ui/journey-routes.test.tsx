@@ -32,6 +32,10 @@ const t = (key: string, params?: Record<string, string | number>) =>
 
 const FIND = { timeout: 8000 };
 
+// Deep-link routes mount the real app tree; 20 s is too tight under workers
+// (DEC-029). A genuine hang still fails at 60 s.
+jest.setTimeout(60_000);
+
 beforeAll(() => {
   setI18nLocale('en');
 });
@@ -122,13 +126,27 @@ describe('journey flow deep links (mock data only)', () => {
 
 describe('station picker deep link + modal hand-off', () => {
   it('resolves /search/station-picker and loads the demo directory', async () => {
-    await renderRouter('src/app', {
-      initialUrl: '/search/station-picker?field=to',
-    });
+    // Regression guard (DEC-029): a direct modal deep link must NOT warn that
+    // the modal is the first screen. `unstable_settings.anchor` keeps a
+    // non-modal screen beneath it, so the warning disappears.
+    const warn = jest.spyOn(console, 'warn');
 
-    expect(await screen.findByTestId('screen-station-picker', FIND)).toBeTruthy();
-    expect(await screen.findByText('Демо Централна гара София', FIND)).toBeTruthy();
-    expect(screen.getByText(t('stations.demo.notice'))).toBeTruthy();
+    try {
+      await renderRouter('src/app', {
+        initialUrl: '/search/station-picker?field=to',
+      });
+
+      expect(await screen.findByTestId('screen-station-picker', FIND)).toBeTruthy();
+      expect(await screen.findByText('Демо Централна гара София', FIND)).toBeTruthy();
+      expect(screen.getByText(t('stations.demo.notice'))).toBeTruthy();
+
+      const modalWarnings = warn.mock.calls
+        .map((args) => args.map(String).join(' '))
+        .filter((line) => line.includes('uses presentation "modal"'));
+      expect(modalWarnings).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('filters with Cyrillic, Latin and mixed input through the REAL hook and provider', async () => {

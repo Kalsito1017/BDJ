@@ -30,6 +30,14 @@ import { OnboardingGate } from '../features/onboarding';
 import { AppDataProvider } from '../hooks';
 import { ThemeProvider } from '../theme';
 
+/**
+ * Deep-link anchor (DEC-029). `search/station-picker` is presented as a modal;
+ * without a non-modal screen already in the stack, a direct deep link makes it
+ * the first screen, so Expo Router warns and renders it as a card. Anchoring
+ * the tab shell keeps the modal presentation and gives Back a sensible target.
+ */
+export const unstable_settings = { anchor: '(tabs)' };
+
 export default function RootLayout() {
   return (
     <ThemeProvider>

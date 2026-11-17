@@ -18,10 +18,10 @@ human/legal items outstanding) and `CHANGELOG.md` for what changed per phase.
 | In-app ticket sales | **Disabled** (feature flag `ticketSales` OFF, mock provider only) until written BDZ authorization and a supported integration exist (DEC-004, plan.md 17.1). |
 | Payment card data | Never collected, stored or logged — by design; provider-hosted checkout only (plan.md 17.3). |
 | Capacity ("1,000,000 concurrent users") | **No such claim.** Load test not run (DEC-011, `docs/scale-and-load-test-plan.md`). |
-| CI | Workflow exists (`.github/workflows/ci.yml`) and the repo was pushed to GitHub on 2026-10-22, so a run **may** have been triggered. **No agent has observed any CI run or its output — treat CI status as UNVERIFIED** and check the repository's Actions tab. |
+| CI | Workflow exists (`.github/workflows/ci.yml`). The **human reports the run is RED (2026-11-17); no agent has observed the log**. The reproduced causes (expired test date, load-sensitive timeouts) are fixed in DEC-029 and `format:check` was added to the job — **CI is not claimed green until a human observes a passing run**. |
 | iOS / Android builds | **NOT RUN** in this environment (Linux). See [Building](#building). |
 | Store submission | Not started. Drafts only: `docs/store-metadata-draft.md`, `docs/privacy-labels-draft.md`, `docs/release-notes-draft.md` (all require human/legal approval). |
-| Tests | **806 tests / 65 suites, gates green 2026-10-25** (`npm run typecheck` PASS, `npm run lint` 0 problems, `npm run format:check` PASS — DEC-027). Must be re-run before release. Device testing **NOT RUN**. |
+| Tests | **810 tests / 66 suites, gates green 2026-11-17** (`npm run typecheck` PASS, `npm run lint` 0 problems, `npm run format:check` PASS — DEC-029). Must be re-run before release. Device testing **NOT RUN**. |
 | Product name | "BDZ Train Companion" is a **working name, UNCONFIRMED** (`review.common.app_name` in the locale catalogs). |
 | Release readiness | **NO-GO for public release** — see `docs/checklist-status.md` (authorization, legal review, translation review, named human owners all open). |
 
@@ -71,17 +71,16 @@ npm run audit:deps    # npm audit --audit-level=high (dependency gate)
 high/critical advisories. It also runs in CI as an advisory job
 (`dependency-audit`, non-blocking for now — see the comment in the workflow).
 
-**Known advisories (re-verified 2026-10-24, `npm audit --json` — DEC-019
-re-baseline):** 5 high-severity findings from 2 unique upstream advisories —
-`node-forge` (GHSA-86w9-cpqp-85rv, transitive via
-`@expo/code-signing-certificates`, **no patch available**) and a `zod`
-advisory (GHSA-mrhx-c7xc-m3w5) affecting only `@expo/cli`'s nested
-`zod@3.25.76` build tooling — the app's direct `zod@4.6.7` is patched. Two
-advisories in the original 2026-10-22 baseline (`braces`, `sprintf-js`) were
-withdrawn upstream on 2026-10-22/23. No non-breaking fix exists
-(`npm audit fix` offers only breaking downgrades; **never** run
-`npm audit fix --force`); re-baselining the CI audit gate is a decision for the
-security owner (UNASSIGNED).
+**Known advisories (re-verified 2026-11-17, `npm audit --json`):** 34 findings
+— **3 high, 31 moderate**. High: `node-forge` (transitive via
+`@expo/code-signing-certificates`; a long list of upstream advisories), the
+`@expo/cli` chain, and a `zod` advisory (GHSA-mrhx-c7xc-m3w5) that affects only
+the nested `zod@3.25.76` build tooling — the app's direct `zod@4.6.7` is
+patched. The 2026-10-24 baseline (5 high / 2 advisories) is **stale**.
+`npm audit fix --dry-run` now proposes large churn (+43 / −132 / ~67 changed
+packages), which is **not** a reviewed fix and must not be applied blind.
+Re-baselining the CI audit gate is a decision for the security owner
+(UNASSIGNED); **never** run `npm audit fix --force`.
 
 ## Environment variables
 
@@ -106,7 +105,7 @@ See `.env.example`. Rules (plan.md §7, addbeforerelease.txt §5):
 - Tests live in `tests/` (unit, component, integration against the mock
   provider, plus in-app e2e smoke and an accessibility sweep); shared setup in
   `src/test/`.
-- Current coverage: **806 tests / 65 suites, all passing (2026-10-25, DEC-027)**
+- Current coverage: **810 tests / 66 suites, all passing (2026-11-17, DEC-029)**
   — re-run before release. This is a Jest/Node environment result; it is **not**
   device testing.
 - Physical-device testing (Android + iOS) is required before release
@@ -162,7 +161,7 @@ Docker provides a repeatable Node toolchain — nothing more.
 - the Expo/Metro dev server published on `http://localhost:8081`
   (`curl http://localhost:8081/status` → `packager-status:running`)
 
-**Verification status (2026-10-24):**
+**Verification status (last verified 2026-11-17):**
 
 - `docker compose config` — **PASSED**.
 - `docker compose build` — **PASSED** (image `bdj-mobile`; `npm ci` runs during
@@ -170,12 +169,11 @@ Docker provides a repeatable Node toolchain — nothing more.
   daemon at a `RUN chown -R node:node /app` layer; the Dockerfile now uses
   `COPY --chown=node:node` + `USER node` (same non-root result, lighter layer —
   DEC-020).
-- Gates inside the container (`docker compose run --rm mobile ...`) — **PASSED**:
-  `npm run typecheck`, `npm run lint`, `npm test` → **435 passed / 435 in 35
-  suites** (2026-10-24; the host suite has since grown to **806 tests / 65
-  suites** — re-run the container gates before trusting this number here). Two
-  tests needed explicit 20s timeouts (they exceeded Jest's 5s
-  default under container CPU load — recorded as a defect + fix, DEC-020).
+- Gates inside the container — **PASSED 2026-11-17** after rebuilding
+  `bdj-mobile` and using a fresh dependency volume: `npm run typecheck`,
+  `npm run lint`, `npm run format:check`, `npm test` → **810 passed / 810 in 66
+  suites** (55.57 s; DEC-029). The 2026-10-24 run was 435/435 in 35 suites
+  (DEC-020); two tests needed explicit timeouts under container CPU load.
 - Metro reachability from the host — **PASSED**: `docker compose up -d`, then
   `curl http://127.0.0.1:8081/status` → `packager-status:running`. The port is
   published on loopback only per security finding F-01; change the compose
@@ -201,6 +199,14 @@ docker compose run --rm mobile npm test     # gates inside the container
 docker compose down -v
 ```
 
+**Stale dependency volume.** The named `mobile_node_modules` volume is copied
+from the image when it is first created and is **not** refreshed by
+`docker compose build`. After a lockfile change, a stale volume can shadow the
+new image (symptom: `Cannot find module '@tanstack/react-query'` and similar).
+Reset the dev-only dependency cache with `docker compose down -v`, then re-run
+the gates. `mobile_node_modules` holds dependencies only — never app data,
+signing material or secrets.
+
 Note: `npm` 11.19 blocks install scripts by default (`unrs-resolver`,
 `@parcel/watcher` warnings during `npm ci`); this does not affect the gates
 above. Metro file watching in the container may fall back to polling.
@@ -223,7 +229,7 @@ scripts/        repo tooling scripts (none yet)
 
 - `docs/checklist-status.md` — status of **every** `addbeforerelease.txt`
   checklist item (sections 1–17 + GO/NO-GO) with evidence and owners.
-- `docs/decisions.md` — architecture decision log (DEC-001 … DEC-027).
+- `docs/decisions.md` — architecture decision log (DEC-001 … DEC-029).
 - `docs/release-notes-draft.md` — 0.1.0 release notes (**draft**).
 - `docs/store-metadata-draft.md` — app-store listing metadata (**draft**).
 - `docs/privacy-labels-draft.md` — App Store privacy labels / Play data safety

@@ -22,7 +22,7 @@ Entries follow: **ID — Title**; *Date*; *Status*; Context; Decision; Consequen
 | DEC-009 | Dependency policy and verified baseline | Accepted |
 | DEC-010 | Checklist file naming discrepancy + conflict rule | Noted |
 | DEC-011 | Capacity-claims policy ("1,000,000 concurrent users") | Accepted |
-| DEC-012 | Map SDK selection | Open |
+| DEC-012 | Map SDK selection | Accepted |
 | DEC-013 | Phase 0 integration record (lead verification + reconciliation) | Noted |
 | DEC-014 | Phase 1 integration record: independent review findings and disposition | Noted |
 | DEC-015 | Phase 2 UI shell: theme, routes, onboarding, UI states | Accepted |
@@ -39,6 +39,7 @@ Entries follow: **ID — Title**; *Date*; *Status*; Context; Decision; Consequen
 | DEC-026 | Reviewer-qa Phase 5 delta: verdict, pinned silent-loss defect, same-day fix | Noted |
 | DEC-027 | Phase 7 hardening wave: notices surfaced, e2e smoke + a11y sweep | Noted |
 | DEC-028 | Release-readiness docs + Settings language switch closed | Noted |
+| DEC-029 | Gate reproducibility: expired test date, suite budgets, QueryClient teardown | Noted |
 
 ---
 
@@ -1460,3 +1461,76 @@ remain the DEC-020 historical run (435/35) with a warning that the host suite
 is now 810/66 — refresh the container run before release; large uncommitted
 work from the Phase 5/7 lanes sits in the working tree — commit hygiene is the
 human's call.
+
+---
+
+## DEC-029 — Gate reproducibility: expired test date, heavy-suite budgets, QueryClient teardown
+
+- **Date:** 2026-11-17
+- **Status:** Noted
+
+**Context.** The 2026-10-25/28 baseline (DEC-027/028) did **not** reproduce on
+a fresh WSL2 host (16 vCPU, 7 GB, Node 24.18.0, npm 11.16.0; `npm ci` = 1,328
+packages). Two full runs disagreed with each other: **803/810** (4 suites
+failed) and **802/810** (5 suites failed). The human reports CI is **RED**
+(2026-11-17); no agent has observed the job log, so CI stays UNVERIFIED here.
+
+**Root causes (verified; neither is a product regression).**
+
+1. **Expired hard-coded date.** `tests/mobile-ui/resilience.test.tsx` mocked the
+   route params with `date: '2026-11-01'`. From 2026-11-02 that date is in the
+   past, so `journeySearchFromRouteParams` **correctly** rejected it and the
+   results screen rendered its error state — 4 tests failed. Fixed by
+   computing `addDaysIso(systemTodayIso(), 7)` (hoisting-safe inside the
+   `jest.mock` factory). This alone explains a deterministic red CI.
+2. **Load-sensitive timeouts.** The four router-heavy suites (e2e smoke,
+   accessibility sweep, navigation shell, journey deep links) exceeded the 20 s
+   global timeout with 8 workers on this host. Serial control
+   (`npx jest tests/smoke tests/mobile-ui/accessibility-sweep.test.tsx
+   tests/mobile-ui/navigation-shell.test.tsx tests/mobile-ui/journey-routes.test.tsx
+   --runInBand --testTimeout=120000`): **5 suites / 35 tests PASS in 210 s**.
+   Fixed with per-suite budgets: 120 s for the one-test e2e flow, 60 s for the
+   other three. The global 20 s stays, so genuine hangs still fail.
+
+**Also fixed in the same wave.**
+
+- **QueryClient teardown.** `claims-lexicon` and `i18n-integrity` rendered
+  `<AppDataProvider>` without a client; the provider's lazy fallback owns
+  5–30 min gc timers that nothing can clear — the suspected worker-hang source
+  (DEC-027). New `tests/support/appData.tsx` owns the client, unmounts first
+  and clears it in `afterEach`. Both full runs after the change contain **zero**
+  "worker process has failed to exit gracefully" lines (previously reported on
+  every full run).
+- **Router modal warning.** A direct deep link to `search/station-picker`
+  (presentation: modal) warned that it was first in its stack. Added
+  `unstable_settings = { anchor: '(tabs)' }` to `src/app/_layout.tsx`; the
+  warning is gone (0 occurrences in both full runs) and the navigation +
+  deep-link suites pass 19/19.
+- **CI gate coverage.** `.github/workflows/ci.yml` now runs
+  `npm run format:check` (a documented gate that was missing) and
+  `npm run test:ci -- --maxWorkers=2` for a deterministic worker count on the
+  4-vCPU runner.
+
+**Gates (lead-run, real output).**
+
+- `npm run typecheck` PASS · `npm run lint` 0 problems ·
+  `npm run format:check` PASS.
+- Host `npm test` run 1: **810 passed / 810, 66 suites, 180.26 s**; run 2:
+  **810/810, 66 suites, 170.19 s**; final commit-candidate run (after the
+  modal-warning regression guard): **810/810, 66 suites, 185.48 s**. Zero
+  worker-exit or modal-warning lines in all three logs; the 22 known RNTL
+  second-argument `findBy*` deprecation notices remain (see Deferred).
+- Docker: after rebuilding `bdj-mobile` (the image predated the Phase 3
+  dependencies) and using a fresh dependency volume — typecheck PASS · lint
+  0 problems · format:check PASS · `npm test` **810/810 in 66 suites, 55.57 s**;
+  zero worker/modal warnings. The pre-existing `bdj_mobile_node_modules` volume
+  was a stale partial install from an older image and shadowed the new build;
+  the README Docker section now documents the reset (`docker compose down -v`).
+
+**Deferred / not claimed.**
+
+- **CI is not claimed green.** A human must push and observe the run.
+- Dependency-audit remediation is out of scope (current `npm audit`: 34
+  findings, 3 high — README updated, security-owner decision).
+- Device/emulator testing remains NOT RUN.
+- RNTL deprecated 2nd-argument `findBy*` timeout warnings remain (cosmetic).

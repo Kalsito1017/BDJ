@@ -28,10 +28,10 @@
  * contract files still fails hard — that is the H1 regression class.
  */
 
-import { render as renderRntl, screen } from '@testing-library/react-native';
+import { screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { AppDataProvider } from '../../src/hooks';
+import { renderWithAppData } from '../support/appData';
 
 import MapScreen from '../../src/app/(tabs)/map';
 import SearchScreen from '../../src/app/(tabs)/search';
@@ -110,9 +110,9 @@ function collectRenderedText(node: RenderedNode | string | null): string[] {
   return (node.children ?? []).flatMap(collectRenderedText);
 }
 
-/** Render inside AppDataProvider: screens use the hooks/store context (Phase 5). */
-const render = (node: ReactNode): ReturnType<typeof renderRntl> =>
-  renderRntl(<AppDataProvider>{node}</AppDataProvider>);
+/** Render inside the real AppDataProvider (owned QueryClient — see the helper). */
+const render = (node: ReactNode): ReturnType<typeof renderWithAppData> =>
+  renderWithAppData(node);
 
 function renderedLines(): string[] {
   return collectRenderedText(screen.toJSON());

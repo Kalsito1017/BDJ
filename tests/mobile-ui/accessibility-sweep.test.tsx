@@ -76,6 +76,11 @@ jest.mock('../../src/services/storage/localStore', () => {
 /** findBy* third-argument form (the 2nd-argument timeout is deprecated). */
 const WAIT = { timeout: 8000 };
 
+// Router-heavy suite: the screen surfaces mount the real app tree; the 20 s
+// global budget is too tight under parallel workers (DEC-029). A hang still
+// fails at 60 s.
+jest.setTimeout(60_000);
+
 const SOFIA_ID = 'demo-station-sofia-central';
 const VARNA_ID = 'demo-station-varna';
 const VALID_DATE = addDaysIso(systemTodayIso(), 7);

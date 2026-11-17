@@ -31,16 +31,29 @@ import {
   useStationSearch,
   useStoreNotices,
 } from '../../src/hooks';
+import { addDaysIso, systemTodayIso } from '../../src/features/journey-search/validation';
 import { setI18nLocale, translate } from '../../src/i18n';
 import type { JourneySearchResult, TrainSegment } from '../../src/types/journey';
 import type { Station } from '../../src/types/station';
 
 jest.setTimeout(20000);
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
-  useLocalSearchParams: () => ({ from: 'sofia', to: 'varna', date: '2026-11-01' }),
-}));
+// A hard-coded travel date expires: `2026-11-01` became "in the past" on
+// 2026-11-02, so the results screen correctly treated every mocked deep link
+// as invalid and rendered its error state (DEC-029). Compute a date the app's
+// own rules still accept, inside the factory to stay hoisting-safe.
+const VALID_DATE = addDaysIso(systemTodayIso(), 7);
+
+jest.mock('expo-router', () => {
+  const { addDaysIso: addDays, systemTodayIso: today } = jest.requireActual<
+    typeof import('../../src/features/journey-search/validation')
+  >('../../src/features/journey-search/validation');
+  const validDate = addDays(today(), 7);
+  return {
+    useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
+    useLocalSearchParams: () => ({ from: 'sofia', to: 'varna', date: validDate }),
+  };
+});
 
 jest.mock('../../src/hooks', () => ({
   useFavouriteRoutes: jest.fn(),
@@ -84,7 +97,7 @@ function train(): TrainSegment {
 }
 
 const DEMO_RESULT: JourneySearchResult = {
-  search: { fromStationId: 'sofia', toStationId: 'varna', date: '2026-11-01' },
+  search: { fromStationId: 'sofia', toStationId: 'varna', date: VALID_DATE },
   journeys: [],
   fetchedAt: '2026-10-24T08:00:00.000Z',
   provenance: { kind: 'demo', fetchedAt: '2026-10-24T08:00:00.000Z' },

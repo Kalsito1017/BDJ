@@ -63,6 +63,11 @@ const t = (key: string, params?: Record<string, string | number>) =>
 /** findBy* third-argument form (the 2nd-argument timeout is deprecated). */
 const WAIT = { timeout: 8000 };
 
+// One continuous flow through the real router; under a constrained CI
+// container this legitimately exceeds the 20 s global budget (DEC-029).
+// 120 s still fails a genuine hang instead of masking it.
+jest.setTimeout(120_000);
+
 /** Inside the accepted travel-date window (DEC-022 route rules). */
 const VALID_DATE = addDaysIso(systemTodayIso(), 7);
 

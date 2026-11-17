@@ -8,6 +8,9 @@ station picker, data-access hooks, deep-link params now READ — see EP-1/EP-2/E
 **Updated:** 2026-10-24c (same subagent — Phase 5 review (DEC-024): MapLibre map surface,
 favourites/recent-searches persistence, resilience/offline — see EP-2/EP-4/EP-5/EP-6 and
 AC-20/AC-21/AC-22; findings in `docs/security-privacy-review-2026-10-24c.md`).
+**Updated:** 2026-11-17 (same subagent — DEC-029 review delta: EP-1/EP-2/EP-3
+deep-link bounds/P5-M1 status and the `unstable_settings.anchor` note; EP-5 audit
+baseline re-verified at 34 findings / 3 high / 31 moderate; AC-17/AC-18/AC-20 aligned).
 **Status:** DRAFT for human review. No human security owner has reviewed this document
 (addbeforerelease.txt §17: "Security / compliance owner" — UNASSIGNED).
 **Required by:** addbeforerelease.txt §5 ("Threat model written before launch");
@@ -125,7 +128,7 @@ are i18n keys, never raw input (W3B review §3).
 | STRIDE | Threat | Mitigation today | Required action |
 |--------|--------|------------------|-----------------|
 | S | Attacker-supplied station names/times rendered as if provider-authoritative | Provenance on every record (`src/types/provenance.ts`); UI must render labels (DEC-006) | Phase 3/4 tests: provenance label always visible; `demo`-only mock enforced by test (DEC-002) |
-| T | Malformed/oversized input reaches a future provider or breaks validation | Types define bounded fields (`src/types/journey.ts:27-40`); Zod boundary specified (DEC-007 App. B) and **implemented** for provider payloads (`src/services/api/parsePayload.ts`); **Phase 3:** the journey form is Zod-validated (see above) and the picker query is length-bounded (128); **Phase 5:** the stations-screen input is bounded too (128 — W3B-L1 closed) | Implement Zod + length/format limits at the boundary in Phase 4; never trust form state alone; length-bound deep-link ids (W3B-M1, EP-3) — the only remaining unbounded input |
+| T | Malformed/oversized input reaches a future provider or breaks validation | Types define bounded fields (`src/types/journey.ts:27-40`); Zod boundary specified (DEC-007 App. B) and **implemented** for provider payloads (`src/services/api/parsePayload.ts`); **Phase 3:** the journey form is Zod-validated (see above) and the picker query is length-bounded (128); **Phase 5:** the stations-screen input is bounded too (128 — W3B-L1 closed) | Implement Zod + length/format limits at the boundary in Phase 4; never trust form state alone. Deep-link `from`/`to` are length/charset-bounded at the route boundary since 2026-11-17 (EP-3); the opaque `/journey/[id]` remains non-empty-only and unparsed. |
 | R | Search requests are not user-actionable denials ("something went wrong") | `ProviderError.code` → localised message contract (`src/types/errors.ts:76-78`); `ErrorState` renders only `ERROR_MESSAGE_KEYS[code]`, never raw error text (`src/components/ErrorState.tsx`) | Phase 4 UI mapping test for every code |
 | I | Search terms (travel intent) leak into logs/crash reports | No logging exists anywhere in `src/` (verified again 2026-10-24b, incl. the Phase 3 code: zero `console.*` calls) | Ban logging of `JourneySearch`, station text and `GeoPoint` in the logging policy when logging is added (checklist §14 "privacy test") |
 | D | Huge result sets / repeated searches exhaust device or future API | `limit` on search (`src/types/journey.ts:39`); retry policy bounded, jittered (`src/services/common/RequestOptions.ts:46-52`) | Future API needs rate limits (checklist §5/§11) |
@@ -148,15 +151,17 @@ AsyncStorage directly (module comment; the hooks go through the injectable `Loca
 Known gaps from review 2026-10-24c: **P5-M2** (the read-side re-validation is untested,
 its "visible notice on corruption" is rendered nowhere, and `localStore.ts:41-42` /
 `localStoreSchemas.ts:107-108` claim a privacy test that does not exist), **P5-M1**
-(uncaught `LocalStoreInputError` on the deep-link-fed "Save this route" path), **P5-L1**
-(hostile deep-link ids ≤128 chars can be persisted as favourites with one tap),
-**P5-L2** (a hostile snapshot is parsed in full before trimming — transient cost only).
+(**closed 2026-11-17**, DEC-029: the save path catches `LocalStoreInputError` and
+`from`/`to` are length/charset-bounded at the route boundary), **P5-L1**
+(hostile deep-link ids ≤128 chars can still be persisted as favourites with one tap —
+ids are not resolved against the station directory), **P5-L2** (a hostile snapshot is
+parsed in full before trimming — transient cost only).
 
 | STRIDE | Threat | Mitigation today | Required action |
 |--------|--------|------------------|-----------------|
 | S/T | Tampered storage on a rooted device injects data or old schema | Re-validation on read mandated (`src/types/favourites.ts:118-123`); versioned `LocalStoreSnapshot`; **today's two keys are re-narrowed on read** — language via `normalizeLocale` allow-list (`catalog.ts:61-65`), onboarding flag via `value === 'true'`; any corruption falls back to safe defaults and never crashes (`settingsStorage.ts:50-57`). **Phase 5 snapshot:** Zod re-validation record-by-record on read, per-field reset, unknown `schemaVersion` replaced, write inputs re-validated (`localStore.ts:296-386`) | **Close P5-M2:** the read path needs corruption tests (nothing seeds corrupt storage today) and the promised key-path allowlist/privacy test; DEC-007 App. B.4's "visible notice on corruption" must be surfaced in the UI or downgraded — `notices` reaches no screen today |
 | S | Forcing `settings.onboardingCompleted` skips the guide (or clears it re-shows it) | Impact is cosmetic only — the guide carries no consent or permission (see EP-6-E); replayable at `/onboarding` | None; accept and document |
-| S | Snapshot poisoning: hostile deep-link ids (or future free text) are persisted as favourites/recents | Writes are Zod-bounded (ids ≤128, label ≤80, search echo shape only); recents are recorded from the Zod-validated form ONLY; favourites can be written from deep-linked `from`/`to` via "Save this route" (bounded junk, rendered as "unknown" — plain `Text`, no injection) | **P5-L1/P5-M1:** resolve deep-linked ids against the station directory before offering save; length-bound/charset-check route params at the boundary (W3B-M1); catch `LocalStoreInputError` at the save call site |
+| S | Snapshot poisoning: hostile deep-link ids (or future free text) are persisted as favourites/recents | Writes are Zod-bounded (ids ≤128, label ≤80, search echo shape only); recents are recorded from the Zod-validated form ONLY; favourites can be written from deep-linked `from`/`to` via "Save this route" (route-boundary-bounded junk since 2026-11-17, rendered as "unknown" — plain `Text`, no injection) | **P5-L1 (open):** resolve deep-linked ids against the station directory before offering save. **P5-M1 closed 2026-11-17** (the `from`/`to` route-boundary bounds also satisfy W3B-M1 on this path): the save call site catches `LocalStoreInputError` (EP-3). |
 | R | User cannot remove their travel history | **Since Phase 5:** every saved record is user-deletable (per-item delete + "clear all" behind `ConfirmDialog` — `RecentSearchesSection`/`FavouritesSection`/`SaveRouteControl`); `clearAll` wipes both collections; caps + 90-day TTL bound retention (`localStore.ts:245-294`) | Keep "clear saved items" reachable from Settings too if product asks (plan.md §8); test deletion persists across restart (partially covered in `tests/storage/localStore.test.ts`) |
 | I | Stored travel intent readable via backup/other apps | AsyncStorage is app-sandboxed plaintext; snapshot holds ids, date/time echo, optional label and timestamps only — no location, no identifiers, no names (schema-enforced; verified 2026-10-24c). Nothing about it is logged (zero logging in `src/`) | Accept for non-secret data; document in privacy notice (favourites/recents = travel intent, on-device, deletable). Tokens (future) MUST go to SecureStore, never AsyncStorage (checklist §3) |
 | D | Corrupt storage crashes the app | Read failures return the fallback (tested in `tests/storage/settingsStorage.test.ts`); write failure is caught in the i18n layer (`runtime.ts:79-82`) and does not revert the in-memory switch; **Phase 5:** snapshot reads never throw (`normalizeStoredSnapshot`), write failures surface as `write_failed` notices | Extend the *tests* to the snapshot read path (P5-M2); cap parse cost for oversized hostile snapshots (P5-L2) |
@@ -166,10 +171,18 @@ its "visible notice on corruption" is rendered nowhere, and `localStore.ts:41-42
 
 | STRIDE | Threat | Mitigation today | Required action |
 |--------|--------|------------------|-----------------|
-| S | Rogue app/website invokes `bdztrain://` with crafted parameters (e.g. fake "payment success") | Scheme registered (`app.json:7`). **Since Phase 3 (2026-10-24b) three routes READ parameters** (`/search/results?from=&to=&date=`, `/search/station-picker?field=`, `/journey/[id]`) — DEC-022 §1. Verified handling: `date` is strict-validated (`isValidIsoDate`, `JourneyResultsScreen.tsx:57`), `field` is coerced to a `from`/`to` allow-list (`StationPickerScreen.tsx:29-31`), ids are opaque lookups only (unknown → `not_found`; fixture maps are Zod-parsed on every call). Malformed params render an actionable error state, never a crash (tested `journey-routes.test.tsx:88-93`). **Gap:** `from`/`to`/`id` are non-empty-checked but NOT length/format-bounded (W3B-M1) — and since Phase 5 the results screen also feeds those ids to "Save this route", whose `addFavourite` throws uncaught on out-of-bound ids (**P5-M1**: user-assisted crash via hostile deep link + one tap) | Length-bound + charset-check every deep-link id at the route boundary (review W3B-M1) **and** make the save path total (catch `LocalStoreInputError`) — P5-M1; when ticketing exists: a deep-link return is **never** proof of payment — state re-fetched via `getOrder` (DEC-008 rule 1, `TicketingProvider` note) |
+| S | Rogue app/website invokes `bdztrain://` with crafted parameters (e.g. fake "payment success") | Scheme registered (`app.json:7`). **Since Phase 3 (2026-10-24b) three routes READ parameters** (`/search/results?from=&to=&date=`, `/search/station-picker?field=`, `/journey/[id]`) — DEC-022 §1. Verified handling: `date` is strict-validated (`isValidIsoDate`, `JourneyResultsScreen.tsx:57`), `field` is coerced to a `from`/`to` allow-list (`StationPickerScreen.tsx:25-27`), ids are opaque lookups only (unknown → `not_found`; fixture maps are Zod-parsed on every call). **2026-11-17 (DEC-029):** `from`/`to` are now length/charset-bounded — 1–128 chars and control characters rejected — in `journeySearchFromRouteParams` (`src/features/journey-search/validation.ts:50-55`); the results screen's "Save this route" path catches `LocalStoreInputError` (`src/features/favourites/SaveRouteControl.tsx:82-86`), so **P5-M1 is fixed** (no uncaught press-handler crash). `/journey/[id]` remains an opaque, non-empty-only value (`JourneyDetailsScreen.tsx:26-29`) — never parsed; unknown ids return `not_found`; cache entries are bounded by `gcTime`. Malformed params render an actionable error state, never a crash (tested `journey-routes.test.tsx:88-93`). | Optional hardening (P5-L1): resolve deep-linked `from`/`to` against the station directory before offering save; make mock error messages static (W3B-L2/W3-L1) before crash reporting. When ticketing exists: a deep-link return is **never** proof of payment — state re-fetched via `getOrder` (DEC-008 rule 1, `TicketingProvider` note). |
 | T | Path/route manipulation to reach flag-gated screens | Route set is fixed (`/`, `/search`, `/map`, `/trips`, `/settings`, `/onboarding`, `/search/results`, `/search/station-picker`, `/journey/[id]`); no flag-gated routes exist yet | Phase 2/6: gated routes unreachable in release builds, tested |
 | I | Return URLs leak order ids into the OS/browser history | `returnUrl`/`cancelUrl` are app deep links by spec (`src/services/ticketing/TicketingProvider.ts:360-372`). No param value is logged anywhere (zero `console.*` in `src/`); nothing renders `ProviderError.message`. **Residual:** the mock copies caller/deep-link ids into `error.message` (`MockTrainDataProvider.ts:174,374`) — W3B-L2 | Keep order ids opaque; no PII in URLs ever; make mock error messages static (W3B-L2 / W3-L1) before crash reporting lands |
-| D/E | Crafted/oversized params amplify memory (query-key + cache entries) | Query cache is in-memory with bounded `gcTime` (5 min journey / 30 min station); one cache entry per distinct key | Same length bounds as the S row cap the amplification (W3B-M1) |
+| D/E | Crafted/oversized params amplify memory (query-key + cache entries) | Query cache is in-memory with bounded `gcTime` (5 min journey / 30 min station); one cache entry per distinct key | The `from`/`to` length/charset bounds in the S row now cap the main amplification path (2026-11-17); `/journey/[id]` remains opaque, non-empty-only and never parsed |
+
+**Deep-link anchor note (2026-11-17, DEC-029).** `src/app/_layout.tsx:39` now exports
+`unstable_settings = { anchor: '(tabs)' }`. This is **presentational only**: it seeds the
+root stack with the tab shell so a direct link to the modal `/search/station-picker` has a
+non-modal screen beneath it (Expo Router's `layoutAnchor` reader consumes
+`unstable_settings.anchor`). It adds no route, no permission, no network call and does not
+alter deep-link validation — the parameter handling in the table above is unchanged. Local
+navigation + deep-link suites pass 19/19 (2026-11-17; no device or CI run).
 
 ### EP-4 — Provider responses *(future network boundary; mock only today)*
 
@@ -190,7 +203,7 @@ its "visible notice on corruption" is rendered nowhere, and `localStore.ts:41-42
 | T | Lockfile tampering / malicious install scripts | Lockfile committed; npm 11 blocks install scripts by default (`README.md:180-182`); none of the Phase 5 transitives declares `hasInstallScript` (verified 2026-10-24c) | Pin CI actions to commit SHAs when a human owns CI (currently tag refs); review install-script allowlist when one is created |
 | R | Nobody can tell what a CI run did | CI runs are UNVERIFIED and honestly labelled (`README.md:18-20`) | Human must observe the first real run; branch protection + required checks (checklist §15) |
 | I | Secret in repo/Git history/bundle | Full-history scan found none (see `docs/security-privacy-review-2026-10-22.md` §1); re-run on the Wave 3 tree + all commits 2026-10-24: still none; **re-run 2026-10-24c over the Phase 5 tree + full history: still none**; `.gitignore`/`.dockerignore` cover `.env` + signing material incl. the F-04 additions | Secret-scanning in CI (gitleaks or GitHub secret scanning) before launch |
-| D | Compromised/vulnerable package breaks CI or dev machines | `npm audit` job exists (advisory); baseline CHANGED 2026-10-24: **5 findings (all high) from 2 advisories** — `braces` and `sprintf-js` advisories were **withdrawn** upstream (GHSA-vfj7-8cjw-p6xm withdrawn 2026-10-23; GHSA-hp3w-g68c-fv3c withdrawn 2026-10-22); `node-forge` (GHSA-86w9-cpqp-85rv) remains unpatched; **new** `zod` advisory GHSA-mrhx-c7xc-m3w5 (CVE-2023-54404, unbounded-array memory exhaustion) affects `zod <4.6.6` — the app's direct `zod@4.6.7` is **patched**; the vulnerable copy is `@expo/cli`'s nested `zod@3.25.76` (build tooling only, not in the app bundle); **re-checked 2026-10-24b after the Phase 3 dependency additions: identical — 5 high / 0 moderate / 0 critical, 0 new advisories (W3B-I2)**; **re-checked 2026-10-24c after the Phase 5 additions: identical again — 5 high / 0 moderate / 0 critical, 0 new advisories** | Re-baseline the audit gate (review F-02): the counts moved, so an audit-diff gate must re-baseline now; decide with the security owner when `dependency-audit` becomes required |
+| D | Compromised/vulnerable package breaks CI or dev machines | `npm audit` job exists (advisory). **Re-verified 2026-11-17 (`npm audit --json`, DEC-029): 34 findings — 3 high / 31 moderate / 0 critical.** High entries: `@expo/cli` (via `@expo/metro-config`/`glob`/`zod`), `node-forge` (installed 1.4.0 via `@expo/cli → @expo/code-signing-certificates`; advisories cover ≤1.4.2, and **1.4.3 is available**), and `zod` (nested `@expo/cli` copy 3.25.76; the app's direct `zod@4.6.7` is patched — advisory range `<4.6.6`). These are build-tooling paths, not imported by app code (`npm audit --omit=dev` still shows 3 high / 24 moderate because `expo` depends on `@expo/cli`). npm reports a non-force fix is available, but `npm audit fix --dry-run` proposes large, unreviewed churn (+43 / −132 / ~67 packages, 2026-11-17) — do not apply it blind. **The previous 2026-10-24 baseline is superseded.** | Re-baseline the audit gate (review F-02): 34 findings / 3 high — the security owner must review the `@expo/cli`/`node-forge` upgrade as one batch (1.4.3 exists); `dependency-audit` stays advisory until then; never `npm audit fix --force`. |
 | E | CI token over-permissioned | Workflow quality jobs use no secrets; **F-03 fixed** — `permissions: contents: read` at workflow level (`.github/workflows/ci.yml:16-17`, verified 2026-10-24) | Release credentials only in protected CI secrets (checklist §15); grant per-job permissions when release jobs arrive |
 
 ### EP-6 — Location and map *(nearby flow SHIPPED as a shell 2026-10-23; no location module yet; map surface LIVE since Phase 5 — MapLibre RN + OpenFreeMap, DEC-012)*
@@ -328,15 +341,17 @@ native render is **NOT RUN** here (rules 5/8).
   no param value is ever logged (zero `console.*` in `src/`), nothing renders
   `ProviderError.message`, RN `Text` renders plain text (no WebView/HTML anywhere in the
   tree), ids are opaque lookups and `date` is strict-validated. Keep it that way and never
-  log the query. Residual gaps: length/format bounds on ids (W3B-M1) and static mock error
-  messages (W3B-L2).
+  log the query. Residual gaps: the opaque `/journey/[id]` remains non-empty-only (never
+  parsed) and mock error messages are still non-static (W3B-L2); `from`/`to` were
+  length/charset-bounded on 2026-11-17 (EP-3).
 
 **Journey flow — deep links and data layer (new with Phase 3)**
 - AC-18: A rogue app floods `bdztrain:///search/results?from=<megabytes>` (or thousands of
   distinct `id`s) to amplify memory via TanStack query keys/cache entries or to poison
   future error/crash objects. Counter: in-memory cache with bounded `gcTime` caps the
-  window; **fix the length/format bounds at the route boundary (W3B-M1)** and make mock
-  error messages static (W3B-L2) before crash reporting exists.
+  window; the **`from`/`to` bounds at the route boundary are implemented (2026-11-17,
+  EP-3)** and the opaque `/journey/[id]` is never parsed; make mock error messages
+  static (W3B-L2) before crash reporting exists.
 - AC-19: Travel intent (which stations a person searches, when) is reconstructed from
   storage, logs or crash reports. Counter (updated 2026-10-24c — Phase 5 PERSISTS it):
   favourites + recent searches live in one on-device AsyncStorage snapshot with the
@@ -356,11 +371,11 @@ native render is **NOT RUN** here (rules 5/8).
   Counter: every write is Zod-bounded (ids ≤128, label ≤80, fixed record shapes) and
   re-validated on read with per-field reset (no crash, no execution path); names resolve
   from the station directory so junk renders as "unknown"; recents are recorded from the
-  Zod-validated form only. **Gaps to close (review P5-M1/L1):** length/charset bounds at
-  the route boundary (W3B-M1), catch `LocalStoreInputError` at the save call site (a
-  hostile >128-char id currently throws uncaught in the press handler), prefer saving
+  Zod-validated form only. **Status 2026-11-17 (DEC-029):** the route-boundary
+  length/charset bounds (`from`/`to`) and the `LocalStoreInputError` catch at the save
+  call site are implemented — P5-M1 closed. **Remaining (P5-L1/P5-M2):** prefer saving
   only ids that resolve against the directory, and add the missing corruption/privacy
-  tests (P5-M2).
+  tests.
 - AC-21: **Favourites spam / cap abuse** — automation or a rogue deep link floods saves
   to bloat storage or bury real items. Counter: identity-idempotent adds (same from/to →
   no duplicate), dedupe for recents, hard caps (20 recents / 100 favourites per

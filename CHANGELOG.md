@@ -70,6 +70,12 @@ decision log.
   saved data (merge + disk heal, sortOrder rebase); map attribution missing in
   the fallback state; hostile deep-link ids could crash a press handler; phantom
   privacy-test comments corrected with a real allowlist test.
+- **2026-11-17 (DEC-029):** the resilience suite hard-coded a travel date that
+  expired on 2026-11-02 (tests, not product, turned red); router-heavy suites
+  given 60/120 s budgets instead of the 20 s global one; the
+  `claims-lexicon`/`i18n-integrity` screen suites now own and clear their
+  QueryClient (the hooks harness already did); station-picker deep link no
+  longer warns about modal presentation; `format:check` added to CI.
 
 ### Security
 

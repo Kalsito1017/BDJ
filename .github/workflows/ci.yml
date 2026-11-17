@@ -49,18 +49,25 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+      - name: Prettier format check
+        run: npm run format:check
+
       - name: Jest tests
-        run: npm run test:ci
+        # Explicit workers: the runner has 4 vCPUs, and the RN test
+        # environment is memory-hungry. 2 workers is deterministic and avoids
+        # the load-sensitive timeouts recorded in DEC-029.
+        run: npm run test:ci -- --maxWorkers=2
 
   dependency-audit:
     name: dependency audit (advisory)
     runs-on: ubuntu-latest
     continue-on-error: true
-    # continue-on-error is TEMPORARY and must stay visible: on 2026-10-22 the
-    # tree reports 30 high advisories inherited from upstream Expo / React
-    # Native / Jest tooling chains (braces, node-forge, sprintf-js advisories;
-    # no non-breaking fix available). The security owner (addbeforerelease.txt
-    # §17) decides when this job becomes required. Do not silently delete it.
+    # continue-on-error is TEMPORARY and must stay visible. Re-verified
+    # 2026-11-17: 34 findings (3 high / 31 moderate) via the Expo/RN/Jest
+    # toolchain (node-forge, @expo/cli, nested zod). `npm audit fix` offers a
+    # fix only with large churn (+43/−132/~67 packages) which is NOT reviewed;
+    # the security owner (addbeforerelease.txt §17) decides when this job
+    # becomes required. Do not silently delete it.
     steps:
       - uses: actions/checkout@v7
 

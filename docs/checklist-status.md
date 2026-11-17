@@ -27,9 +27,9 @@ evidence pointer, and the human owner the checklist demands.
 (see section 17). Where a role is required, it is named in brackets. No item
 below has a named human owner today.
 
-**Headline gate numbers (agent-run, 2026-10-25, DEC-027 — must be re-run before
+**Headline gate numbers (agent-run, 2026-11-17, DEC-029 — must be re-run before
 release):** `npm run typecheck` PASS · `npm run lint` 0 problems ·
-`npm run format:check` PASS · `npm test` **806 passed / 806 in 65 suites**.
+`npm run format:check` PASS · `npm test` **810 passed / 810 in 66 suites**.
 
 ---
 
@@ -125,8 +125,8 @@ All rows: UNASSIGNED [product owner + legal + backend].
 | Secrets out of code/repo/Git history/.env; rotate anything pasted | ✅ | Full-tree + history + git-config scans clean (DEC-014, DEC-019, DEC-023, DEC-025: "no secrets anywhere"); nothing to rotate | UNASSIGNED [security] |
 | `EXPO_PUBLIC_*` and map SDK keys are PUBLIC; restrict map keys by bundle ID | ✅ | Documented in README + `.env.example`; no map API key exists at all (DEC-012: keyless OpenFreeMap) | UNASSIGNED [security] |
 | Verify every package exists and is intended (typosquatting); lockfile committed; no unreviewed churn | ✅ | DEC-009 policy; registry-verified installs incl. the `react-native-maplibre` 404 catch (DEC-024); `package-lock.json` committed | UNASSIGNED |
-| Dependency and vulnerability scanning in CI | 🟡 | `dependency-audit` CI job exists but is **advisory**; baseline is 5 high / 2 advisories (DEC-019 re-baseline; unchanged 2026-10-24c). Re-baselining + gate policy = security-owner decision (DEC-014 M3). `npm audit fix --force` forbidden | UNASSIGNED [security] |
-| Input sanitization everywhere user/provider can send data | 🟡 | Zod boundary schemas (DEC-017), route-boundary bounds (DEC-025 P5-M1), store input validation with tests. Deferred hardening: schema `.max()` bounds (DEC-019 W3-M1) | UNASSIGNED [security] |
+| Dependency and vulnerability scanning in CI | 🟡 | `dependency-audit` CI job exists but is **advisory**. Re-verified 2026-11-17: **34 findings — 3 high / 31 moderate** (node-forge, `@expo/cli`, nested zod). The 2026-10-24 baseline (5 high / 2 advisories) is stale; `npm audit fix` offers a fix only with large churn (+43/−132/~67 packages), which is **not reviewed**. Re-baselining + gate policy = security-owner decision (DEC-014 M3, DEC-029). `npm audit fix --force` forbidden | UNASSIGNED [security] |
+| Input sanitization everywhere user/provider can send data | 🟡 | Zod boundary schemas **with `.max()` bounds** (DEC-017, DEC-019 W3-M1), route-boundary id length/control-char bounds (DEC-025 P5-M1 / W3B-M1), store input validation with tests. No known unbounded boundary input as of 2026-11-17 | UNASSIGNED [security] |
 | OWASP protection (MASVS mobile / API Top 10 backend) | 🟡 | Input/validation/claim guards and a threat model exist; **no formal MASVS assessment or penetration test has been run**; API Top 10 N/A (no backend) | UNASSIGNED [security] |
 | File uploads scanned/size-limited (if any) | 📌 | No file uploads exist | UNASSIGNED [security] |
 | CORS not "allow everything"; security headers | 📌 | No server (DEC-003) | UNASSIGNED [DevOps] |
@@ -164,14 +164,14 @@ All rows: UNASSIGNED [legal (BG/EU) + security/compliance owner].
 
 | Item | Status | Evidence | Owner |
 |------|--------|----------|-------|
-| TypeScript strict mode, ESLint, Prettier; readable code | ✅ | `tsconfig.json` strict; gates green 2026-10-25 (DEC-027); `npm run lint` 0 problems | UNASSIGNED [tech lead] |
+| TypeScript strict mode, ESLint, Prettier; readable code | ✅ | `tsconfig.json` strict; gates green 2026-11-17 (DEC-029); `npm run lint` 0 problems | UNASSIGNED [tech lead] |
 | Runtime validation (Zod) of all provider/API responses | ✅ | DEC-017 schemas parse every external payload before mapping; `tests/data-provider/schemas.test.ts` (malformed payloads rejected as `invalid_response`) | UNASSIGNED |
 | Empty, loading, error, offline, timeout and retry states on EVERY screen | ✅ | DEC-023 acceptance criteria; `tests/mobile-ui/states.test.tsx`, `request-error-state.test.tsx`, `resilience.test.tsx`, `journey-results.test.tsx`. Agent-verified in Jest only | UNASSIGNED [QA] |
 | Error messages a user can act on | ✅ | `ProviderError` → localized actionable messages (DEC-007); both locales (catalog guards green) | UNASSIGNED |
 | Forms keep typed values when one field fails validation | ✅ | DEC-022 §2 (tested via the real hook + mock provider) | UNASSIGNED |
 | Destructive actions ask for confirmation | ✅ | `ConfirmDialog` on clear favourites/recents (DEC-024; `tests/mobile-ui/states.test.tsx`, `favourites.test.tsx`) | UNASSIGNED |
 | Scheduled vs real-time vs cached vs demo clearly labelled | ✅ | Provenance union (DEC-006) + label rendering + claim-lexicon guards; `real-time` is reserved and unproducible (DEC-002). Rule 6 enforced by tests | UNASSIGNED |
-| Back button and deep links behave as users expect | 🟡 | Route contract + param validation tested (DEC-022/023/025). **On-device back behaviour NOT RUN**; known expo-router modal `console.warn` for deep-linked `/search/station-picker` (DEC-027) | UNASSIGNED [QA] |
+| Back button and deep links behave as users expect | 🟡 | Route contract + param validation tested (DEC-022/023/025). **On-device back behaviour NOT RUN**; the deep-linked `/search/station-picker` modal warning is fixed in DEC-029 (`unstable_settings.anchor`) | UNASSIGNED [QA] |
 | Notifications only if in scope, user-controllable, permission at moment of use | 📌 | Out of scope — no notifications exist (DEC-003) | UNASSIGNED [product] |
 | Performance on slow networks and low-end devices | 🚫 NOT RUN | Debounce/caching exist (DEC-021) but no network shaping or device matrix has been tested | UNASSIGNED [QA] |
 | Crash reporting/error tracking with PII scrubbing | 📌 | Deliberately none installed (analytics flag OFF, privacy review required first — DEC-004) | UNASSIGNED [security + mobile] |
@@ -268,8 +268,11 @@ UNASSIGNED [DevOps] unless noted.
 
 ## 14. TESTING
 
-Baseline (agent-run, 2026-10-25, DEC-027): **806 tests / 65 suites, all
-passing** — re-run before release. Owner: UNASSIGNED [QA] unless noted.
+Baseline (agent-run, 2026-11-17, DEC-029): **810 tests / 66 suites, all
+passing** — re-run before release. The 2026-10-25 baseline was not
+reproducible: an expired hard-coded travel date and load-sensitive 20 s
+timeouts caused runs of 803/810 and 802/810; both causes are fixed and two
+consecutive full runs are green (DEC-029). Owner: UNASSIGNED [QA] unless noted.
 
 | Item | Status | Evidence | Owner |
 |------|--------|----------|-------|
@@ -293,7 +296,7 @@ passing** — re-run before release. Owner: UNASSIGNED [QA] unless noted.
 | Branching strategy; protected main; required checks | ⛔ | Repo exists on GitHub; branch protection/required checks **unverified** (no agent can see repo settings; CI runs unobserved) | UNASSIGNED [tech lead + DevOps] |
 | Delete dead code and abandoned attempts | 🟡 | Cleanups happened across waves; known leftovers tracked (DEC-019 stale `PENDING_KEYS` list, DEC-024 unused catalog keys inventory) | UNASSIGNED [tech lead] |
 | Split oversized files; no 2,000-line append-only files | ✅ | Largest source file is 829 lines (`tests/storage/localStore-contract.test.ts`); largest src file 812 (`src/services/storage/localStore.ts`) — verified 2026-10-25 with `wc -l` | UNASSIGNED |
-| Architecture decisions recorded with reasons (`docs/decisions.md`) | ✅ | DEC-001 … DEC-027, continuously updated | UNASSIGNED |
+| Architecture decisions recorded with reasons (`docs/decisions.md`) | ✅ | DEC-001 … DEC-029, continuously updated | UNASSIGNED |
 | README: prerequisites, setup, env vars, tests, builds; runnable in under an hour | 🟡 | README covers all required sections (refreshed 2026-10-25); "under an hour" has **never been measured with a new engineer** | UNASSIGNED [tech lead] |
 | Regular dependency/framework upgrades; Expo SDK upgrade plan before EOL | 📌 | No upgrade plan document; dependency audit advisory only (§5) | UNASSIGNED [mobile + DevOps] |
 | Bus factor above one: two people can build, release, operate | ⛔ | **Zero humans are currently able to build/release** (no named owners; iOS builds require macOS/EAS credentials nobody holds) | UNASSIGNED [tech lead] |
@@ -348,9 +351,10 @@ Per `addbeforerelease.txt`:
 | 14 Testing | 🟡 | Physical-device testing (Android + iOS) |
 | 15 Code health | ⛔ NO-GO | Human code review, protected main, bus factor, signing-key policy |
 
-**Verdict: NO-GO for public release as of 2026-10-25.** The code half is in good
-shape (gates green: 806 tests / 65 suites, DEC-027); the human/legal half
-(authorization, legal review, named owners, device QA) is entirely open.
+**Verdict: NO-GO for public release as of 2026-10-25** (code re-verified
+2026-11-17, DEC-029). The code half is in good shape (gates green: 810 tests /
+66 suites); the human/legal half (authorization, legal review, named owners,
+device QA) is entirely open.
 
 **In-app ticket sales — additionally needs sections 3, 4 and written BDZ
 authorization.** Status: **NO-GO, correctly disabled** — `ticketSales` flag OFF

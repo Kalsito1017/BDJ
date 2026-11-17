@@ -33,6 +33,9 @@ jest.mock(
 const t = (key: string, params?: Record<string, string | number>) =>
   translate('en', key, params);
 
+// Mounts the real route tree per test; 20 s is too tight under workers (DEC-029).
+jest.setTimeout(60_000);
+
 beforeAll(() => {
   setI18nLocale('en');
 });
